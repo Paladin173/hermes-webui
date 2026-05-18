@@ -4352,6 +4352,10 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/notes/sources":
         return _handle_notes_sources_list(handler)
+    if parsed.path == "/api/notes/search":
+        return _handle_notes_search(handler, parsed)
+    if parsed.path == "/api/notes/item":
+        return _handle_notes_item(handler, parsed)
 
     # ── Checkpoints / Rollback (GET) ──
     if parsed.path == "/api/rollback/list":
@@ -10703,6 +10707,152 @@ def _handle_notes_sources_list(handler):
         "attach_supported": False,
         "automatic_recall_unchanged": True,
     })
+
+
+def _notes_configured_server(source: str) -> dict:
+    cfg = get_config()
+    servers = cfg.get("mcp_servers", {}) if isinstance(cfg, dict) else {}
+    if not isinstance(servers, dict):
+        return {}
+    source_l = str(source or "").strip().lower()
+    for name, server_cfg in servers.items():
+        if str(name or "").strip().lower() == source_l and isinstance(server_cfg, dict):
+            return server_cfg
+    return {}
+
+
+def _joplin_connection_from_config() -> tuple[str, str]:
+    cfg = _notes_configured_server("joplin")
+    env = cfg.get("env", {}) if isinstance(cfg, dict) else {}
+    if not isinstance(env, dict):
+        env = {}
+    url = str(env.get("JOPLIN_URL") or os.environ.get("JOPLIN_URL") or "http://127.0.0.1:41184").rstrip("/")
+    token = str(env.get("JOPLIN_TOKEN") or os.environ.get("JOPLIN_TOKEN") or "")
+    return url, token
+
+
+def _joplin_api_get(path: str, params: dict | None = None) -> dict:
+    """Call the local Joplin Web Clipper API without logging credentials."""
+    from urllib.parse import urlencode
+    from urllib.request import urlopen
+    from urllib.error import HTTPError, URLError
+
+    base_url, token = _joplin_connection_from_config()
+    if not token:
+        raise ValueError("Joplin token is not configured")
+    safe_path = "/" + str(path or "").lstrip("/")
+    query = dict(params or {})
+    query["token"] = token
+    url = f"{base_url}{safe_path}?{urlencode(query)}"
+    try:
+        with urlopen(url, timeout=8) as response:
+            raw = response.read(2_000_000).decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        raise ValueError(f"Joplin API returned HTTP {exc.code}") from None
+    except URLError as exc:
+        raise ValueError("Joplin API is not reachable") from None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        raise ValueError("Joplin API returned invalid JSON") from None
+    return data if isinstance(data, dict) else {}
+
+
+def _note_snippet(body: str, query: str = "", *, limit: int = 220) -> str:
+    text = re.sub(r"\s+", " ", str(body or "")).strip()
+    if not text:
+        return ""
+    q = str(query or "").strip().lower()
+    if q:
+        idx = text.lower().find(q)
+        if idx > 40:
+            text = "…" + text[max(0, idx - 60):]
+    if len(text) > limit:
+        return text[:limit].rstrip() + "…"
+    return text
+
+
+def _joplin_search_notes(query: str, *, limit: int = 20) -> list[dict]:
+    query = str(query or "").strip()
+    if not query:
+        return []
+    limit = max(1, min(int(limit or 20), 50))
+    data = _joplin_api_get("/search", {
+        "query": query,
+        "type": "note",
+        "fields": "id,title,body,parent_id,updated_time",
+        "limit": limit,
+    })
+    rows = data.get("items") if isinstance(data, dict) else []
+    results = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        note_id = _mcp_safe_display_text(row.get("id") or "", limit=64)
+        if not note_id:
+            continue
+        title = _mcp_safe_display_text(row.get("title") or "Untitled", limit=180)
+        body = str(row.get("body") or "")
+        results.append({
+            "id": note_id,
+            "title": title,
+            "snippet": _mcp_safe_display_text(_note_snippet(body, query), limit=260),
+            "parent_id": _mcp_safe_display_text(row.get("parent_id") or "", limit=64),
+            "updated_time": row.get("updated_time"),
+            "source": "joplin",
+        })
+    return results
+
+
+def _joplin_get_note(note_id: str) -> dict:
+    note_id = str(note_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9]{16,64}", note_id):
+        raise ValueError("Invalid Joplin note id")
+    data = _joplin_api_get(f"/notes/{note_id}", {
+        "fields": "id,title,body,parent_id,updated_time,created_time",
+    })
+    if not data.get("id"):
+        raise ValueError("Joplin note not found")
+    body = str(data.get("body") or "")
+    if len(body) > 50_000:
+        body = body[:50_000].rstrip() + "\n\n[Preview truncated at 50,000 characters]"
+    return {
+        "id": _mcp_safe_display_text(data.get("id") or "", limit=64),
+        "title": _mcp_safe_display_text(data.get("title") or "Untitled", limit=180),
+        "body": _redact_text(body),
+        "parent_id": _mcp_safe_display_text(data.get("parent_id") or "", limit=64),
+        "updated_time": data.get("updated_time"),
+        "created_time": data.get("created_time"),
+        "source": "joplin",
+    }
+
+
+def _handle_notes_search(handler, parsed):
+    query = parse_qs(parsed.query or "")
+    source = str(query.get("source", ["joplin"])[0] or "joplin").strip().lower()
+    q = str(query.get("q", [""])[0] or "").strip()
+    try:
+        limit = int(query.get("limit", ["20"])[0] or 20)
+    except Exception:
+        limit = 20
+    if source != "joplin":
+        return j(handler, {"source": source, "results": [], "error": "Search is currently implemented for Joplin sources only."}, status=400)
+    try:
+        return j(handler, {"source": "joplin", "query": q, "results": _joplin_search_notes(q, limit=limit)})
+    except ValueError as exc:
+        return j(handler, {"source": "joplin", "query": q, "results": [], "error": str(exc)}, status=502)
+
+
+def _handle_notes_item(handler, parsed):
+    query = parse_qs(parsed.query or "")
+    source = str(query.get("source", ["joplin"])[0] or "joplin").strip().lower()
+    note_id = str(query.get("id", [""])[0] or "").strip()
+    if source != "joplin":
+        return j(handler, {"source": source, "error": "Preview is currently implemented for Joplin sources only."}, status=400)
+    try:
+        return j(handler, {"source": "joplin", "note": _joplin_get_note(note_id)})
+    except ValueError as exc:
+        return j(handler, {"source": "joplin", "error": str(exc)}, status=502)
 
 
 def _handle_mcp_servers_list(handler):

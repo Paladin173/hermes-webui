@@ -58,3 +58,55 @@ def test_notes_sources_shows_configured_note_servers_without_tool_inventory():
     assert all(tool.get("inferred") is True for tool in sources[0]["tools"])
     assert sources[0]["tool_source"] == "configured_hint"
     assert sources[0]["status"] == "configured"
+
+
+def test_joplin_search_notes_returns_safe_snippets(monkeypatch):
+    from api import routes
+
+    def fake_get(path, params=None):
+        assert path == "/search"
+        assert params["type"] == "note"
+        return {"items": [{
+            "id": "abc123def4567890",
+            "title": "Hermes Context",
+            "body": "This is a long Hermes context note with useful details.",
+            "parent_id": "folder123",
+            "updated_time": 123,
+        }]}
+
+    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
+
+    results = routes._joplin_search_notes("Hermes")
+
+    assert results == [{
+        "id": "abc123def4567890",
+        "title": "Hermes Context",
+        "snippet": "This is a long Hermes context note with useful details.",
+        "parent_id": "folder123",
+        "updated_time": 123,
+        "source": "joplin",
+    }]
+
+
+def test_joplin_get_note_validates_id_and_truncates_body(monkeypatch):
+    from api import routes
+
+    def fake_get(path, params=None):
+        assert path == "/notes/abc123def4567890"
+        return {
+            "id": "abc123def4567890",
+            "title": "Big Note",
+            "body": "x" * 60000,
+            "parent_id": "folder123",
+            "updated_time": 456,
+            "created_time": 123,
+        }
+
+    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
+
+    note = routes._joplin_get_note("abc123def4567890")
+
+    assert note["title"] == "Big Note"
+    assert note["source"] == "joplin"
+    assert len(note["body"]) < 51000
+    assert "Preview truncated" in note["body"]

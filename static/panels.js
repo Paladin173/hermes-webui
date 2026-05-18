@@ -3564,6 +3564,11 @@ async function deleteCurrentSkill() {
 // ── Memory (main view) ──
 let _memoryData = null;
 let _notesSourcesData = null;
+let _notesSearchResults = [];
+let _notesSelectedSource = 'joplin';
+let _notesPreviewNote = null;
+let _notesSearchError = '';
+let _notesSearchLoading = false;
 let _currentMemorySection = null; // 'memory' | 'user' | 'soul' | 'external_notes'
 let _memoryMode = 'empty'; // 'empty' | 'read' | 'edit'
 
@@ -3617,6 +3622,16 @@ function _renderExternalNotesSources() {
   if (!sources.length) {
     body.innerHTML = `<div class="main-view-content">${recall}<div class="memory-empty">${esc(t('external_notes_empty'))}</div></div>`;
   } else {
+    const selected = sources.find(src => (src.name || '').toLowerCase() === (_notesSelectedSource || '').toLowerCase()) || sources[0];
+    _notesSelectedSource = (selected && selected.name) || 'joplin';
+    const sourceOptions = sources.map(src => `<option value="${esc(src.name||'')}" ${src.name===_notesSelectedSource?'selected':''}>${esc(src.label||src.name||'')}</option>`).join('');
+    const searchError = _notesSearchError ? `<div class="detail-form-error">${esc(_notesSearchError)}</div>` : '';
+    const resultHtml = _notesSearchResults.length
+      ? `<div class="notes-search-results">${_notesSearchResults.map(note => `<button type="button" class="notes-result-card" onclick="previewExternalNote('${esc(note.source||_notesSelectedSource)}','${esc(note.id||'')}')"><strong>${esc(note.title||'Untitled')}</strong>${note.snippet?`<span>${esc(note.snippet)}</span>`:''}</button>`).join('')}</div>`
+      : `<div class="memory-empty">${esc(t('external_notes_search_empty'))}</div>`;
+    const previewHtml = _notesPreviewNote
+      ? `<section class="notes-source-card notes-preview-card"><div class="notes-source-card-head"><strong>${esc(_notesPreviewNote.title||'Untitled')}</strong><span class="detail-badge">${esc(_notesPreviewNote.source||_notesSelectedSource)}</span></div><div class="memory-content preview-md">${renderMd(_notesPreviewNote.body||'')}</div></section>`
+      : '';
     const cards = sources.map(src => {
       const status = src.active ? t('source_active') : (src.status || t('source_configured'));
       const tools = Array.isArray(src.tools) ? src.tools : [];
@@ -3633,7 +3648,16 @@ function _renderExternalNotesSources() {
         ${toolHtml}
       </section>`;
     }).join('');
-    body.innerHTML = `<div class="main-view-content">${recall}${cards}</div>`;
+    const searchUi = `<section class="notes-source-card notes-search-card">
+      <form class="notes-search-form" onsubmit="event.preventDefault(); searchExternalNotes();">
+        <select id="externalNotesSource" onchange="selectExternalNotesSource(this.value)">${sourceOptions}</select>
+        <input id="externalNotesQuery" type="search" placeholder="${esc(t('external_notes_search_placeholder'))}" />
+        <button type="submit" class="btn-secondary">${esc(_notesSearchLoading ? t('loading') : t('search'))}</button>
+      </form>
+      ${searchError}
+      ${resultHtml}
+    </section>`;
+    body.innerHTML = `<div class="main-view-content">${recall}${searchUi}${previewHtml}${cards}</div>`;
   }
   body.style.display = '';
   if (empty) empty.style.display = 'none';
@@ -3701,6 +3725,55 @@ async function loadNotesSources(force) {
     _notesSourcesData = {sources: [], automatic_recall_unchanged: true, error: e && e.message ? e.message : String(e)};
   }
   return _notesSourcesData;
+}
+
+function selectExternalNotesSource(source) {
+  _notesSelectedSource = source || 'joplin';
+  _notesSearchResults = [];
+  _notesPreviewNote = null;
+  _notesSearchError = '';
+  _renderExternalNotesSources();
+}
+
+async function searchExternalNotes() {
+  const input = $('externalNotesQuery');
+  const sourceEl = $('externalNotesSource');
+  const q = input ? input.value.trim() : '';
+  _notesSelectedSource = sourceEl ? sourceEl.value : (_notesSelectedSource || 'joplin');
+  _notesPreviewNote = null;
+  _notesSearchError = '';
+  if (!q) {
+    _notesSearchResults = [];
+    _renderExternalNotesSources();
+    return;
+  }
+  _notesSearchLoading = true;
+  _renderExternalNotesSources();
+  try {
+    const data = await api(`/api/notes/search?source=${encodeURIComponent(_notesSelectedSource)}&q=${encodeURIComponent(q)}&limit=20`);
+    _notesSearchResults = Array.isArray(data.results) ? data.results : [];
+    _notesSearchError = data.error || '';
+  } catch (e) {
+    _notesSearchResults = [];
+    _notesSearchError = e && e.message ? e.message : String(e);
+  } finally {
+    _notesSearchLoading = false;
+    _renderExternalNotesSources();
+    const nextInput = $('externalNotesQuery');
+    if (nextInput) nextInput.value = q;
+  }
+}
+
+async function previewExternalNote(source, id) {
+  _notesSearchError = '';
+  try {
+    const data = await api(`/api/notes/item?source=${encodeURIComponent(source||_notesSelectedSource)}&id=${encodeURIComponent(id||'')}`);
+    _notesPreviewNote = data && data.note ? data.note : null;
+  } catch (e) {
+    _notesPreviewNote = null;
+    _notesSearchError = e && e.message ? e.message : String(e);
+  }
+  _renderExternalNotesSources();
 }
 
 async function openMemorySection(section, el) {
