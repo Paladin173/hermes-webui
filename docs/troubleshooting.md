@@ -93,7 +93,7 @@ If after running steps 1-4 the import still fails *and* `pip install -e .` succe
 
 **Interruption classes.** The WebUI now keeps the user-facing cases separate instead of implying every stale stream was a restart:
 
-- **Browser/SSE connection interrupted** — the live browser `EventSource` transport dropped. The UI reports `Connection interrupted` and tries status/replay/session restore before showing the final browser-side notice.
+- **Browser/SSE connection interrupted** — the live browser `EventSource` transport dropped. The UI reports `Connection interrupted` and tries status/replay/session restore before showing the final browser-side notice. Chat and gateway SSE errors also POST a small sanitized diagnostic event to `/api/client-events/log` (source, session id, stream id, readyState, visibility, online state, path without query string) so server logs can distinguish browser transport loss from backend worker loss.
 - **Lost worker bookkeeping** — the stream id is gone and the worker registry no longer has an active run. Recovery markers carry `interruption_cause: "lost_worker_bookkeeping"` and `/api/chat/stream/status` reports `terminal_state: "lost-worker-bookkeeping"` for non-terminal journals that are no longer active.
 - **Stream/run split-brain** — the stream is gone but `ACTIVE_RUNS` still lists the worker. Recovery markers carry `interruption_cause: "stream_run_split_brain"` so the transcript says this is a bookkeeping split-brain rather than a restart.
 - **Process crash/restart** — `SERVER_START_TIME` is newer than `pending_started_at`, meaning the WebUI process started after the turn began. Recovery markers carry `interruption_cause: "process_restart"` and explicitly say the process-start evidence points to a crash or restart.

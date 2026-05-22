@@ -2080,13 +2080,14 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
     });
 
     source.addEventListener('error',async e=>{
-      source.close();
-      if(_deferStreamErrorIfOffline()) return;
-      if(_deferStreamErrorIfPageHidden()) return;
       if(_terminalStateReached || _streamFinalized){
         _closeSource();
         return;
       }
+      if(typeof recordClientSSEError==='function') recordClientSSEError('chat-response',{ready_state:source?source.readyState:null,session_id:activeSid,stream_id:streamId,reason:'chat EventSource.onerror'});
+      source.close();
+      if(_deferStreamErrorIfOffline()) return;
+      if(_deferStreamErrorIfPageHidden()) return;
       // Attempt one reconnect if the stream is still active server-side
       if(!_reconnectAttempted && streamId){
         _reconnectAttempted=true;

@@ -5,7 +5,7 @@
 
 ### Fixed
 
-- Clarify `Response interrupted` recovery markers so they report that the live response stream stopped instead of asserting that the WebUI process restarted. The recovery path now records distinct interruption causes for real process restarts, stream/run split-brain, and lost worker bookkeeping; browser-side SSE transport failures show a separate `Connection interrupted` message, and client-side `BrokenPipeError` disconnects no longer get logged as server 500s.
+- Clarify `Response interrupted` recovery markers so they report that the live response stream stopped instead of asserting that the WebUI process restarted. The recovery path now records distinct interruption causes for real process restarts, stream/run split-brain, and lost worker bookkeeping; browser-side SSE transport failures show a separate `Connection interrupted` message, client-side `BrokenPipeError` disconnects no longer get logged as server 500s, and chat/gateway SSE errors emit rate-limited, body-capped, sanitized client diagnostics to `/api/client-events/log` for future root-cause checks. The stream-status `terminal_state` value for lost-worker bookkeeping changes from `stale-from-restart` to `lost-worker-bookkeeping`, matching the new non-restart wording.
 
 ## [v0.51.131] — 2026-05-24 — Release DC (stage-batch13 — 6-PR notes-drawer + context-parity + PWA-swipe + locale polish)
 
