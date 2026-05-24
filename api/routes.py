@@ -3752,17 +3752,18 @@ def handle_get(handler, parsed) -> bool:
             cli_messages = []
             state_db_messages = []
             sidecar_metadata_messages = None
+            _session_profile = getattr(s, 'profile', None) or None
             if is_messaging_session:
                 cli_messages = get_cli_session_messages(sid)
             elif load_messages:
-                state_db_messages = get_state_db_session_messages(sid)
+                state_db_messages = get_state_db_session_messages(sid, profile=_session_profile)
             elif not is_messaging_session:
                 # Metadata-only callers still need the same append-only
                 # reconciliation contract as full loads. A raw state.db summary
                 # can count stale rows that the merge intentionally filters out,
                 # which makes sidebar polling think the transcript is always
                 # newer than the loaded conversation.
-                state_db_messages = get_state_db_session_messages(sid)
+                state_db_messages = get_state_db_session_messages(sid, profile=_session_profile)
                 sidecar_metadata_session = Session.load(sid)
                 sidecar_metadata_messages = (
                     getattr(sidecar_metadata_session, "messages", []) or []
@@ -3926,6 +3927,13 @@ def handle_get(handler, parsed) -> bool:
                 )
             if cli_meta and _is_messaging_session_record(cli_meta):
                 raw = _merge_cli_sidebar_metadata(raw, cli_meta)
+                # ``message_count`` in /api/session is the display coordinate
+                # space used for pagination and the header badge. Messaging
+                # state.db metadata can include raw duplicate transport rows that
+                # _merged_session_messages_for_display() intentionally dedupes;
+                # keep the raw count available as ``actual_message_count`` but
+                # do not let it make the frontend expect phantom messages.
+                raw["message_count"] = _merged_message_count
             # Signal to the frontend that older messages were omitted.
             # For msg_before paging, compare against the filtered set,
             # not the full list — otherwise we signal truncation even when
