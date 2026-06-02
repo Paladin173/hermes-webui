@@ -6471,14 +6471,18 @@ function _buildPluginCard(plugin){
 const enabled=plugin&&plugin.enabled!==false;
   const tab=plugin&&plugin.tab;
   const isDashboardPlugin=!!(tab&&tab.path);
+  // No inline onclick/onchange: an inline handler interpolates tab.path/key into
+  // a JS-string-in-attribute context where HTML-escaping is insufficient (a
+  // crafted value could break out). Render inert markup + bind listeners below
+  // with the raw closure values.
   const openBtn=enabled&&tab&&tab.path
-    ? `<a href="${esc(tab.path)}" class="plugin-open-btn" onclick="switchPluginPage(event,'${esc(tab.path)}','${esc(tab.label||plugin.name)}');return false;">${esc(tab.label||plugin.name||'Open')} \u2197</a>`
+    ? `<a href="${esc(tab.path)}" class="plugin-open-btn">${esc(tab.label||plugin.name||'Open')} \u2197</a>`
     : '';
   const toggleHtml=enabled&&isDashboardPlugin
     ? `<div class="plugin-card-footer-row">
          <span class="plugin-toggle-label">${t('plugins_enable_toggle')||'Enabled'}</span>
          <label class="plugin-toggle-switch">
-           <input type="checkbox" checked onchange="handlePluginEnableToggle('${esc(plugin.key)}',this.checked)">
+           <input type="checkbox" class="plugin-enable-toggle" checked>
            <span class="plugin-toggle-slider"></span>
          </label>
        </div>`
@@ -6486,7 +6490,7 @@ const enabled=plugin&&plugin.enabled!==false;
     ? `<div class="plugin-card-footer-row">
          <span class="plugin-toggle-label">${t('plugins_enable_toggle')||'Enable'}</span>
          <label class="plugin-toggle-switch">
-           <input type="checkbox" onchange="handlePluginEnableToggle('${esc(plugin.key)}',this.checked)">
+           <input type="checkbox" class="plugin-enable-toggle">
            <span class="plugin-toggle-slider"></span>
          </label>
        </div>`
@@ -6520,6 +6524,22 @@ const enabled=plugin&&plugin.enabled!==false;
       ${toggleHtml}
     </div>
   `;
+  // Bind handlers with the RAW closure values (not interpolated into inline JS),
+  // so a hostile tab.path/key can't break out of a JS-string attribute context.
+  if(tab&&tab.path){
+    const _openEl=card.querySelector('.plugin-open-btn');
+    if(_openEl){
+      const _p=tab.path, _l=tab.label||plugin.name;
+      _openEl.addEventListener('click', function(ev){ switchPluginPage(ev, _p, _l); });
+    }
+  }
+  if(isDashboardPlugin){
+    const _tog=card.querySelector('.plugin-enable-toggle');
+    if(_tog){
+      const _k=plugin.key;
+      _tog.addEventListener('change', function(){ handlePluginEnableToggle(_k, this.checked); });
+    }
+  }
   return card;
 }
 

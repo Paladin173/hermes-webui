@@ -418,6 +418,29 @@ class TestPluginNameValidation:
         assert not plugins._VALID_PLUGIN_NAME.match("")
         assert not plugins._VALID_PLUGIN_NAME.match("1leading-digit")
 
+    def test_invalid_tab_path_rejected(self):
+        import api.plugins as plugins
+        assert plugins._VALID_PLUGIN_TAB_PATH.match("/demo-dashboard")
+        assert plugins._VALID_PLUGIN_TAB_PATH.match("/nic/branch_sync")
+        # Must be absolute, no quotes/JS-breakout/query/fragment/control chars.
+        assert not plugins._VALID_PLUGIN_TAB_PATH.match("demo")          # not absolute
+        assert not plugins._VALID_PLUGIN_TAB_PATH.match("/x');alert(1)//")  # quote breakout
+        assert not plugins._VALID_PLUGIN_TAB_PATH.match("/x?y=1")         # query
+        assert not plugins._VALID_PLUGIN_TAB_PATH.match("/x#frag")        # fragment
+        assert not plugins._VALID_PLUGIN_TAB_PATH.match("/x y")           # whitespace
+
+    def test_open_button_and_toggle_use_no_inline_handlers(self):
+        # tab.path / plugin.key must not be interpolated into inline onclick/
+        # onchange JS (HTML-escaping is insufficient for a JS-string context).
+        # They're bound via addEventListener with raw closure values instead.
+        js = read("static/panels.js")
+        start = js.find("function _buildPluginCard")
+        seg = js[start:js.find("return card;", start)]
+        assert "onclick=\"switchPluginPage" not in seg
+        assert "onchange=\"handlePluginEnableToggle" not in seg
+        assert "addEventListener('click'" in seg
+        assert "addEventListener('change'" in seg
+
 
 class TestPluginCollisionDetection:
     """Tests for plugin name and tab.path collision detection."""

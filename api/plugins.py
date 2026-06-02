@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # a settings key). Lowercase alnum + - / _, 1-64 chars, must start with a letter.
 _VALID_PLUGIN_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
+# Valid tab.path: a clean same-origin absolute path. Must start with '/', then
+# only safe path chars — no quotes, whitespace, control chars, query ('?') or
+# fragment ('#') so it can't break out of a JS-string nav arg or shadow routes.
+_VALID_PLUGIN_TAB_PATH = re.compile(r"^/[A-Za-z0-9._~/-]{0,255}$")
+
 # plugin_name -> manifest dict (as loaded from manifest.json)
 PLUGIN_MANIFESTS: dict[str, dict] = {}
 
@@ -66,6 +71,14 @@ def load_plugins() -> None:
 
         tab = manifest.get("tab", {})
         tab_path = tab.get("path", f"/{name}")
+
+        # Validate tab.path: it's a same-origin route the plugin page is served
+        # at AND a value passed into client-side navigation. Require a clean
+        # absolute path — no quotes/control chars/query/fragment — so a hostile
+        # manifest can't shadow odd routes or inject via the path.
+        if not _VALID_PLUGIN_TAB_PATH.match(str(tab_path)):
+            logger.warning("Skipping plugin %s with invalid tab.path %r (must match %s)", name, tab_path, _VALID_PLUGIN_TAB_PATH.pattern)
+            continue
 
         if name in PLUGIN_MANIFESTS:
             logger.warning("Duplicate plugin name skipped: %s (already loaded)", name)

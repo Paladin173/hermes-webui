@@ -5043,7 +5043,9 @@ def save_settings(settings: dict) -> dict:
     if isinstance(_dashboard_plugins, dict):
         current_dash = current.get("dashboard_plugins", {})
         if isinstance(current_dash, dict):
-            current_dash.update(_dashboard_plugins)
+            # Coerce values to bool + keep only str keys so settings.json can't be
+            # polluted with non-bool/non-str junk from a crafted POST.
+            current_dash.update({k: bool(v) for k, v in _dashboard_plugins.items() if isinstance(k, str)})
             current["dashboard_plugins"] = current_dash
     for k, v in settings.items():
         # dashboard_plugins is deep-merged above (not a flat allowlisted scalar).
