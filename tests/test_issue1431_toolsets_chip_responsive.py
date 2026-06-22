@@ -3,7 +3,7 @@
 The chip must:
   * Be hidden by default (CSS base rule).
   * Be shown only at wide composer-footer widths (>= 1100px container query).
-  * Stay hidden on mobile (@media max-width:640px and @container 520px).
+  * Stay hidden on mobile (@media max-width:640px and the .cf-burger stage).
   * Have its visibility controlled by CSS, NOT by JS (single source of truth).
   * Continue to track state through _applyToolsetsChip() so /api/session/toolsets
     keeps working for scripted callers regardless of UI visibility.
@@ -48,16 +48,18 @@ class TestToolsetsChipResponsiveCSS:
         )
 
     def test_narrow_container_query_keeps_hiding(self):
-        """The existing @container (max-width: 520px) rule must still hide the chip."""
+        """The hamburger (.cf-burger) stage must still hide the toolsets chip."""
         css = _src("style.css")
-        # Look for the existing 520px rule that already hid composer-toolsets-wrap
+        # The fixed-width 520px container query was replaced by the JS fit-based
+        # .cf-burger stage class, which routes the toolsets chip into the
+        # hamburger menu by hiding the inline wrap.
         m = re.search(
-            r'@container\s+composer-footer\s*\(\s*max-width:\s*520px\s*\).*?\.composer-toolsets-wrap\s*\{\s*display:\s*none\s*!important',
+            r'\.composer-footer\.cf-burger\b.*?\.composer-toolsets-wrap\s*\{\s*display:\s*none\s*!important',
             css, re.DOTALL,
         )
         assert m, (
-            "@container composer-footer (max-width: 520px) must continue to "
-            "hide .composer-toolsets-wrap with !important"
+            ".composer-footer.cf-burger must continue to hide "
+            ".composer-toolsets-wrap with !important"
         )
 
     def test_mobile_viewport_keeps_hiding(self):

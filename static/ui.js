@@ -1510,7 +1510,7 @@ function _providerQuotaIndicatorText(status){
   if(accountLimits&&Array.isArray(accountLimits.windows)&&accountLimits.windows.length){
     const w=accountLimits.windows.find(x=>x&&Number.isFinite(Number(x.remaining_percent)))||accountLimits.windows[0];
     const remaining=_formatQuotaPercentShort(w&&w.remaining_percent);
-    if(remaining) return {label:provider+' '+remaining, title:(status.message||'Provider usage loaded')+' — '+remaining+' remaining'};
+    if(remaining) return {label:remaining, title:provider+' — '+(status.message||'Provider usage loaded')+' — '+remaining+' remaining'};
   }
   const quota=status.quota||null;
   if(quota){
@@ -1521,7 +1521,7 @@ function _providerQuotaIndicatorText(status){
       const parts=[];
       if(used) parts.push('used '+used);
       if(limit) parts.push('limit '+limit);
-      return {label:provider+' '+remaining, title:(status.message||'Provider quota loaded')+(parts.length?' — '+parts.join(' · '):'')};
+      return {label:remaining, title:provider+' — '+(status.message||'Provider quota loaded')+(parts.length?' — '+parts.join(' · '):'')};
     }
   }
   return null;
@@ -1529,6 +1529,8 @@ function _providerQuotaIndicatorText(status){
 function renderProviderQuotaIndicator(status){
   const chip=$('providerQuotaChip');
   const label=$('providerQuotaChipLabel');
+  const mobileAction=$('composerMobileQuotaAction');
+  const mobileLabel=$('composerMobileQuotaLabel');
   if(!chip||!label) return;
   // Hide entirely when the user has disabled the ambient quota chip in Settings.
   // Default is off (window._showQuotaChip defaults to false in boot.js) so users
@@ -1537,6 +1539,8 @@ function renderProviderQuotaIndicator(status){
     chip.hidden=true;
     label.textContent='';
     chip.removeAttribute('title');
+    if(mobileAction){mobileAction.style.display='none'; mobileAction.removeAttribute('title');}
+    if(mobileLabel) mobileLabel.textContent='';
     return;
   }
   const text=_providerQuotaIndicatorText(status);
@@ -1544,11 +1548,19 @@ function renderProviderQuotaIndicator(status){
     chip.hidden=true;
     label.textContent='';
     chip.removeAttribute('title');
+    if(mobileAction){mobileAction.style.display='none'; mobileAction.removeAttribute('title');}
+    if(mobileLabel) mobileLabel.textContent='';
     return;
   }
   label.textContent=text.label;
   chip.title=text.title;
   chip.hidden=false;
+  if(mobileAction){
+    mobileAction.style.display='';
+    mobileAction.title=text.title;
+    mobileAction.classList.remove('active');
+  }
+  if(mobileLabel) mobileLabel.textContent=text.label;
 }
 async function refreshProviderQuotaIndicator(){
   // Short-circuit before the fetch when the chip is disabled — no point asking
@@ -2257,6 +2269,39 @@ function _getConfiguredModelBadge(modelId,badgeMap,providerId){
   return matches[0];
 }
 
+function _compactComposerModelChipLabel(modelId,labelText){
+  const id=String(modelId||'').trim();
+  const raw=String(labelText||'').trim();
+  if(!raw) return getModelLabel(id);
+  const idLower=id.toLowerCase();
+  const rawLower=raw.toLowerCase();
+  const slash=id.indexOf('/');
+  if(slash>0){
+    const provider=id.slice(0,slash).toLowerCase();
+    if(rawLower.startsWith(provider+'/')){
+      return raw.slice(provider.length+1).trim();
+    }
+  }
+  if(id&&rawLower===idLower&&raw.includes('/')){
+    return raw.slice(raw.indexOf('/')+1).trim();
+  }
+  // Generic cleanup for provider/model text variants that can survive when
+  // the selected model id and option label use different provider prefixes.
+  if(raw.includes('/') && !/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)){
+    const parts=raw.split('/').map(s=>s.trim()).filter(Boolean);
+    if(parts.length>=2){
+      const tail=parts[parts.length-1];
+      const tailLower=tail.toLowerCase();
+      if(idLower && (tailLower===idLower || idLower.endsWith('/'+tailLower))) return tail;
+      if(parts.length===2){
+        const leadLower=parts[0].toLowerCase();
+        if(tailLower.startsWith(leadLower+'-')) return tail;
+      }
+    }
+  }
+  return raw;
+}
+
 function syncModelChip(){
   const sel=$('modelSelect');
   const chip=$('composerModelChip');
@@ -2274,8 +2319,9 @@ function syncModelChip(){
   }
   const opt=_selectedModelOption();
   const text=opt?opt.textContent:getModelLabel(sel.value||'');
+  const compactText=_compactComposerModelChipLabel(sel.value||'', text);
   const gatewayRouting=_latestGatewayRoutingForSession(S.session);
-  const displayText=_formatGatewayModelLabel(sel.value||'',text,gatewayRouting)||text;
+  const displayText=_formatGatewayModelLabel(sel.value||'',compactText,gatewayRouting)||compactText;
   label.textContent=displayText;
   if(mobileLabel) mobileLabel.textContent=displayText;
   chip.title=gatewayRouting?`${sel.value||'Conversation model'} ${_gatewayRoutingLabel(gatewayRouting)}`:(sel.value||'Conversation model');
@@ -2990,7 +3036,12 @@ function _normalizeReasoningEffort(eff){
 function _formatReasoningEffortLabel(effort){
   if(effort==='none') return 'None';
   if(!effort) return 'Default';
-  return effort;
+  if(effort==='minimal') return 'Minimal';
+  if(effort==='low') return 'Low';
+  if(effort==='medium') return 'Medium';
+  if(effort==='high') return 'High';
+  if(effort==='xhigh') return 'XHigh';
+  return effort.charAt(0).toUpperCase()+effort.slice(1);
 }
 
 function _reasoningEffortContext(){
@@ -3063,7 +3114,9 @@ function _applyReasoningChip(eff){
   if(chip){
     const inactive=!effort||effort==='none';
     chip.classList.toggle('inactive',inactive);
-    chip.title='Reasoning effort: '+text;
+    const labelText='Reasoning effort: '+text;
+    chip.title=labelText;
+    chip.setAttribute('aria-label', labelText);
   }
   if(mobileAction) mobileAction.classList.toggle('inactive',!effort||effort==='none');
   _highlightReasoningOption(effort);
@@ -3552,6 +3605,81 @@ window.addEventListener('resize',function(){
   }
 });
 
+// ── Fit-based composer footer collapse ──────────────────────────────────────
+// The footer collapses based on whether .composer-left actually overflows the
+// room it is given — not at fixed pixel widths. scrollWidth > clientWidth is a
+// reliable overflow signal here because the chip wraps never flex-shrink and
+// .composer-left scrolls. Because the measurement is content-based, hiding chips
+// (Settings → composer controls) frees real space, so the remaining chips keep
+// their fuller form for longer instead of collapsing at an arbitrary threshold.
+// Stage classes on .composer-footer (see style.css):
+//   (none) full labels · .cf-icons icon chips · .cf-icons.cf-burger hamburger.
+let _composerFitScheduled=false;
+let _composerFitObserversBound=false;
+
+function _fitComposerFooter(){
+  const footer=document.querySelector('.composer-footer');
+  if(!footer) return;
+  const left=footer.querySelector('.composer-left');
+  if(!left) return;
+  // Skip while the footer is hidden / unmeasurable so we don't spuriously
+  // collapse to the hamburger; a later ResizeObserver tick re-runs the fit.
+  if(!left.clientWidth) return;
+  const overflows=function(){return left.scrollWidth>left.clientWidth+1;};
+  // Always re-measure from the fullest layout so regained space re-expands the
+  // chips. Reading scrollWidth forces layout but not paint, so the transient
+  // full state between these toggles is never shown.
+  footer.classList.remove('cf-icons','cf-burger');
+  if(!overflows()) return;            // full labelled chips fit
+  footer.classList.add('cf-icons');
+  if(!overflows()) return;            // icon chips fit
+  footer.classList.add('cf-burger');  // consolidate into the hamburger menu
+}
+window._fitComposerFooter=_fitComposerFooter;
+
+function _scheduleComposerFit(){
+  if(_composerFitScheduled) return;
+  _composerFitScheduled=true;
+  requestAnimationFrame(function(){
+    _composerFitScheduled=false;
+    try{_fitComposerFooter();}catch(_){ }
+  });
+}
+window._scheduleComposerFit=_scheduleComposerFit;
+
+function _initComposerFooterFit(){
+  const footer=document.querySelector('.composer-footer');
+  const left=footer&&footer.querySelector('.composer-left');
+  if(!footer||!left) return;
+  _scheduleComposerFit();
+  if(_composerFitObserversBound) return;
+  _composerFitObserversBound=true;
+  // Footer width changes (window / sidebar / right-panel). Toggling the stage
+  // classes does NOT change the footer's own width, so this never loops.
+  if(window.ResizeObserver){
+    try{new ResizeObserver(_scheduleComposerFit).observe(footer);}catch(_){ }
+  }
+  // Content changes (model/profile/workspace/reasoning labels, chip show/hide)
+  // change scrollWidth without changing footer width — watch the left cluster.
+  // We never mutate left's own DOM in the fit, so this can't loop either.
+  if(window.MutationObserver){
+    try{
+      new MutationObserver(_scheduleComposerFit).observe(left,{
+        childList:true,subtree:true,characterData:true,
+        attributes:true,attributeFilter:['class','style','hidden']
+      });
+    }catch(_){ }
+  }
+  window.addEventListener('resize',_scheduleComposerFit);
+}
+window._initComposerFooterFit=_initComposerFooterFit;
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',_initComposerFooterFit);
+}else{
+  _initComposerFooterFit();
+}
+
 // ── Scroll pinning ──────────────────────────────────────────────────────────
 // When streaming, auto-scroll only while the user is following the live tail.
 // Any manual scroll up sets a sticky unpinned flag until the user scrolls back
@@ -3992,7 +4120,7 @@ function _clearActivityElapsedTimer(){
   _activityElapsedTimerGroup=null;
 }
 
-const _MOBILE_CONFIG_BASE_LABEL='Workspace, model, reasoning, and context settings';
+const _MOBILE_CONFIG_BASE_LABEL='Workspace, model, quota, reasoning, and context settings';
 
 function _setCtxCompressButton(btn,text){
   if(!btn)return;
@@ -4013,6 +4141,7 @@ function _setCtxCompressButton(btn,text){
 
 function _syncMobileCtxDisplay(state){
   const mobileConfigBtn=$('composerMobileConfigBtn');
+  const ctxBadge=$('composerMobileCtxRingWrap');
   const row=$('composerMobileContextAction');
   const usageLine=$('composerMobileContextUsage');
   const tokensLine=$('composerMobileContextTokens');
@@ -4021,6 +4150,7 @@ function _syncMobileCtxDisplay(state){
   const compressBtn=$('composerMobileCtxCompressBtn');
   if(!state||!state.visible){
     if(row)row.style.display='none';
+    if(ctxBadge)ctxBadge.hidden=true;
     if(mobileConfigBtn){
       mobileConfigBtn.setAttribute('aria-label',_MOBILE_CONFIG_BASE_LABEL);
       mobileConfigBtn.setAttribute('title',_MOBILE_CONFIG_BASE_LABEL);
@@ -4037,6 +4167,7 @@ function _syncMobileCtxDisplay(state){
     }
     return;
   }
+  if(ctxBadge)ctxBadge.hidden=false;
   (function updateCtxRing(pct) {
     var arc = document.getElementById('ctx-arc');
     var num = document.getElementById('ctx-num');
@@ -4110,6 +4241,7 @@ function _syncCtxIndicator(usage){
   const wrap=$('ctxIndicatorWrap');
   const el=$('ctxIndicator');
   if(!el)return;
+  const tabletLikeViewport=!!(window.matchMedia&&window.matchMedia('(min-width: 560px) and (max-width: 900px)').matches);
   const ctxHidden=!!(window._composerControlVisibility&&window._composerControlVisibility.hide_composer_context);
   if(ctxHidden){
     if(wrap) wrap.style.display='none';
@@ -4132,7 +4264,26 @@ function _syncCtxIndicator(usage){
   const cost=usage.estimated_cost;
   // Show indicator whenever we have any usage data (tokens or cost)
   if(!promptTok&&!totalTok&&!cost&&!cacheReadTok&&!cacheWriteTok){
-    if(wrap) wrap.style.display='none';
+    if(wrap){
+      if(tabletLikeViewport){
+        wrap.style.display='';
+        wrap.classList.remove('ctx-mid','ctx-high');
+      }else{
+        wrap.style.display='none';
+      }
+    }
+    if(tabletLikeViewport){
+      const ring=$('ctxRingValue');
+      const center=$('ctxPercent');
+      if(ring){
+        const circumference=61.261056745;
+        ring.style.strokeDasharray=String(circumference);
+        ring.style.strokeDashoffset=String(circumference);
+      }
+      if(center) center.textContent='0';
+      _syncMobileCtxDisplay({visible:false});
+      return;
+    }
     _syncMobileCtxDisplay({visible:false});
     return;
   }
@@ -4516,7 +4667,9 @@ function _gatewayRoutingLabel(routing){
 function _formatGatewayModelLabel(modelId,labelText,routing){
   if(!routing)return'';
   const usedModel=String(routing.used_model||'').trim();
-  const base=usedModel?getModelLabel(usedModel):(labelText||getModelLabel(modelId));
+  const base=usedModel
+    ?_compactComposerModelChipLabel(usedModel,getModelLabel(usedModel))
+    :_compactComposerModelChipLabel(modelId,labelText||getModelLabel(modelId));
   const via=_gatewayRoutingLabel(routing);
   return via?`${base} ${via}`:base;
 }

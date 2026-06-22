@@ -1992,6 +1992,9 @@ function _applyComposerFooterVisibilitySettings(){
   if(hidden.hide_composer_reasoning&&typeof closeReasoningDropdown==='function') closeReasoningDropdown();
   if(hidden.hide_composer_toolsets&&typeof closeToolsetsDropdown==='function') closeToolsetsDropdown();
   if(hidden.hide_composer_mobile_config&&typeof closeMobileComposerConfig==='function') closeMobileComposerConfig();
+  // Hiding/showing chips changes how much room the footer needs, so re-run the
+  // fit so the remaining chips reclaim the freed space (or re-collapse).
+  if(typeof window._scheduleComposerFit==='function') window._scheduleComposerFit();
 }
 window._applyComposerFooterVisibilitySettings=_applyComposerFooterVisibilitySettings;
 

@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The composer footer now collapses based on whether its controls actually overflow, not at fixed pixel breakpoints.** A new fit routine (`_fitComposerFooter()` in `static/ui.js`) measures whether `.composer-left` overflows the room it is given (`scrollWidth > clientWidth`) and toggles stage classes on `.composer-footer`: full labelled chips → `.cf-icons` (profile/workspace/model trim to icons; reasoning, quota, and context stay inline) → `.cf-icons.cf-burger` (controls fold into the single hamburger menu). The old `@container composer-footer (max-width: 700px/520px)` thresholds are replaced by these JS-driven stage classes, re-run on footer resize (ResizeObserver) and on content changes (MutationObserver). Because the trigger is real overflow, hiding chips in Settings → composer controls frees space, so the remaining chips keep their fuller form for longer instead of collapsing at an arbitrary width. As part of the same pass the footer chips were made more compact so they fit sooner: the model chip drops the redundant `provider/` prefix (`anthropic/claude-opus-4.8` → `claude-opus-4.8`), the reasoning chip uses a shorter label, and the provider-quota chip now leads with the remaining value/price instead of the provider name (the provider moves to the tooltip). Before/after screenshots under `docs/pr-assets/footer-before.png` and `docs/pr-assets/footer-after.png`. (`static/ui.js`, `static/style.css`, `static/boot.js`, `static/index.html`, `static/i18n.js`)
+
 ## [v0.51.562] — 2026-06-21 — Release TU (selected-context quote cards)
 
 ### Added

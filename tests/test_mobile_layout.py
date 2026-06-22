@@ -295,91 +295,113 @@ def _container_media_block(css: str, media_query: str):
 
 
 def test_composer_controls_switch_to_icon_only_by_container_width():
-    """Composer controls should progressively compact based on footer width."""
+    """Composer config controls narrow in three fit-driven stages.
+
+    Three-stage, content-fit model (no viewport magic numbers and no fixed
+    container-width thresholds). _fitComposerFooter() in ui.js measures whether
+    .composer-left actually overflows the room it is given and toggles stage
+    classes on .composer-footer:
+      * (no class)          -> full labelled chips
+      * .cf-icons           -> icon-chip stage: profile collapses to an icon, the
+        workspace switch keeps its dropdown caret (label hidden), and model /
+        reasoning / quota / context stay inline. No hamburger yet.
+      * .cf-icons.cf-burger -> hamburger consolidation: workspace switch / model /
+        quota / reasoning / toolsets / context fold into the single mobile
+        config (hamburger) button.
+
+    Because the trigger is real overflow, hiding chips (Settings -> composer
+    controls) frees space and the remaining chips keep their fuller form for
+    longer instead of collapsing at an arbitrary pixel threshold.
+    """
+    # The container metadata is retained for the toolsets (min-width:1100px) and
+    # superthin (max-width:280px) container queries and is still asserted here.
     assert re.search(r'\.composer-footer\s*\{[^}]*container-type:inline-size[^}]*container-name:composer-footer[^}]*\}', CSS), \
         ".composer-footer should define container-type:inline-size and container-name:composer-footer"
-    compact_700 = _container_query_block(CSS, "composer-footer (max-width: 700px)")
-    assert compact_700, "Expected composer mid-width compact rules at @container composer-footer (max-width: 700px)"
-    for selector in (
-        ".composer-workspace-label",
-        ".composer-model-label",
-        ".composer-model-chevron",
-        "#composerWorkspaceLabel",
-        "#composerModelLabel",
-        ".composer-workspace-chip",
-        ".composer-model-chip",
-        ".composer-divider",
-    ):
-        assert selector in compact_700, f"{selector} should be present in the 700px composer compact block"
-    assert "display:none" in compact_700
-    assert "max-width:52px" in compact_700
-    # Ensure this first stage does not prematurely remove profile/reasoning labels.
-    assert ".composer-profile-label" not in compact_700
-    assert ".composer-reasoning-label" not in compact_700
-    assert ".composer-profile-chevron" not in compact_700
-    assert ".composer-reasoning-chevron" not in compact_700
 
-    compact_520 = _container_query_block(CSS, "composer-footer (max-width: 520px)")
-    assert compact_520, "Expected full composer icon-only rules at @container composer-footer (max-width: 520px)"
+    # ---- Icon-chip stage (.cf-icons) -------------------------------------
     for selector in (
-        ".composer-profile-label",
-        ".composer-workspace-label",
-        ".composer-model-label",
-        ".composer-reasoning-label",
-        ".composer-profile-chevron",
-        ".composer-workspace-chevron",
-        ".composer-model-chevron",
-        ".composer-reasoning-chevron",
-        "#composerProfileLabel",
-        "#composerWorkspaceLabel",
-        "#composerModelLabel",
-        "#composerReasoningLabel",
-        ".composer-model-chip",
-        ".composer-profile-chip",
-        ".composer-reasoning-chip",
+        ".composer-footer.cf-icons .composer-profile-label",
+        ".composer-footer.cf-icons .composer-profile-chevron",
+        ".composer-footer.cf-icons #composerProfileLabel",
+        ".composer-footer.cf-icons .composer-workspace-label",
+        ".composer-footer.cf-icons #composerWorkspaceLabel",
+        ".composer-footer.cf-icons .composer-model-label",
+        ".composer-footer.cf-icons .composer-profile-chip",
+        ".composer-footer.cf-icons .composer-divider",
     ):
-        assert selector in compact_520, f"{selector} should be present in the 520px composer compact block"
-    assert "width:44px" in compact_520
-    assert "display:none" in compact_520
-    assert ".composer-workspace-chip{display:none!important" in compact_520.replace(" ", ""), \
-        "520px container compact mode must remove the blank workspace switch slot"
-    assert ".composer-left>*{flex-shrink:0" in compact_520.replace(" ", ""), \
-        "520px container compact mode must stop controls from shrinking into each other"
-    assert ".composer-mobile-config-btn" in compact_520 and "display:inline-flex!important" in compact_520, \
-        "520px container compact mode must expose the mobile config button even when viewport is wider than 640px"
+        assert selector in CSS, f"{selector} should be present in the .cf-icons icon-chip rules"
+    assert ".composer-footer.cf-icons .composer-profile-chip{box-sizing:border-box;width:44px" in CSS, \
+        "profile chip should be an icon-sized button in the icon-chip stage"
+    assert ".composer-footer.cf-icons .composer-left > *{flex-shrink:0" in CSS, \
+        "icon-chip stage must stop controls from shrinking into each other"
+    # The hamburger must NOT take over yet at the icon-chip stage.
+    assert ".composer-footer.cf-icons .composer-mobile-config-btn" not in CSS, \
+        "the .cf-icons icon-chip stage should keep controls inline, not expose the hamburger"
+    # The workspace switch keeps its caret (no blank-chip / forced hide here).
+    assert ".composer-footer.cf-icons .composer-workspace-chip{display:none!important" not in CSS, \
+        "icon-chip stage keeps the workspace switch (caret) visible"
+    # Model / reasoning stay inline at this stage (not routed into the hamburger).
+    assert ".composer-footer.cf-icons .composer-left > .composer-model-wrap{display:none!important" not in CSS, \
+        "model control should stay inline in the icon-chip stage"
+    assert ".composer-footer.cf-icons .composer-left > .composer-reasoning-wrap{display:none!important" not in CSS, \
+        "reasoning control should stay inline in the icon-chip stage"
 
-    # Regression intent:
-    # - this container rule should not depend on right-panel open/closed state.
-    # - left-sidebar-only constriction must still collapse composer controls together.
-    assert ".layout:not(.workspace-panel-collapsed)" not in compact_700, \
-        "composer-footer compact rule should be state-agnostic (left sidebar + closed right panel case included)"
-    assert ".layout:not(.workspace-panel-collapsed)" not in compact_520, \
-        "composer-footer compact rule should be state-agnostic (left sidebar + closed right panel case included)"
+    # ---- Hamburger consolidation (.cf-burger) ----------------------------
+    assert ".composer-footer.cf-burger .composer-mobile-config-btn{box-sizing:border-box;position:relative;display:inline-flex!important" in CSS, \
+        "the .cf-burger stage must expose the hamburger config button even when the viewport is wider than 640px"
+    assert ".composer-footer.cf-burger .composer-workspace-chip{display:none!important" in CSS, \
+        "the .cf-burger stage must remove the blank workspace switch slot"
+    for wrap in (".composer-model-wrap", ".composer-reasoning-wrap", ".composer-toolsets-wrap"):
+        assert f".composer-footer.cf-burger .composer-left > {wrap}" in CSS, \
+            f"{wrap} should be routed into the hamburger in the .cf-burger stage"
+    assert ".composer-footer.cf-burger .composer-left > .composer-toolsets-wrap{display:none!important" in CSS, \
+        "session toolsets chip must stay hidden in the .cf-burger stage (#1431)"
+    assert ".composer-footer.cf-burger .ctx-indicator-wrap{display:none!important" in CSS, \
+        "standalone context ring must hand off to the hamburger in the .cf-burger stage"
+
+    # The collapse is JS-driven by real content overflow, not a CSS threshold.
+    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    assert "_fitComposerFooter" in ui_js, \
+        "ui.js must define the fit-based collapse routine"
+    assert "scrollWidth" in ui_js and "clientWidth" in ui_js, \
+        "the fit routine must measure real content overflow (scrollWidth vs clientWidth)"
+    assert "cf-icons" in ui_js and "cf-burger" in ui_js, \
+        "the fit routine must toggle the cf-icons / cf-burger stage classes"
+    assert "ResizeObserver" in ui_js, \
+        "the fit routine must re-run when the footer is resized"
 
 
 def test_composer_700px_workspace_switch_does_not_become_blank_chip():
-    """The 700px container state may hide the workspace label, but needs a switch affordance."""
-    compact_700 = _container_query_block(CSS, "composer-footer (max-width: 700px)")
-    assert compact_700, "Expected composer mid-width compact rules at @container composer-footer (max-width: 700px)"
-
-    workspace_label = _declarations(_rule_body(compact_700, ".composer-workspace-label"))
-    workspace_chip = _optional_declarations(compact_700, ".composer-workspace-chip")
-    workspace_chevron = _optional_declarations(compact_700, ".composer-workspace-chevron")
-    mobile_config = _optional_declarations(compact_700, ".composer-mobile-config-btn")
-
-    assert _display_hidden(workspace_label), \
-        "700px container state should hide the long workspace label before tighter mobile rules"
-    if not _display_hidden(workspace_chip) and not _display_inline_flex(mobile_config):
-        assert not _display_hidden(workspace_chevron), \
-            "700px container state must not leave the visible workspace switch chip without a label or chevron"
+    """The icon-chip stage may hide the workspace label, but needs a switch affordance."""
+    css_ns = CSS.replace(" ", "")
+    # The icon-chip stage hides the long workspace label...
+    assert ".composer-footer.cf-icons .composer-workspace-label" in CSS \
+        and ".composer-footer.cf-icons #composerWorkspaceLabel" in CSS, \
+        "icon-chip stage should hide the long workspace label before tighter rules"
+    # ...but keeps the switch chip itself (and its caret) visible — no blank chip.
+    assert ".composer-footer.cf-icons .composer-workspace-chip{display:none!important" not in css_ns, \
+        "icon-chip stage must keep the visible workspace switch chip"
+    assert ".composer-footer.cf-icons .composer-workspace-chevron{display:none" not in css_ns, \
+        "icon-chip stage must not leave the visible workspace switch chip without a caret"
 
 
 def test_composer_compact_switch_is_not_viewport_only():
-    """Compact controls should be container-triggered, not bound to viewport width alone."""
-    assert "composer-footer (max-width: 700px)" in CSS, \
-        "Container-query breakpoint should track composer footer width"
-    assert "composer-footer (max-width: 520px)" in CSS, \
-        "Container-query second-stage breakpoint should track composer footer width"
+    """Compact controls should be fit-driven, not bound to viewport width alone."""
+    # The collapse is driven by the JS fit routine + stage classes, not by a CSS
+    # container/viewport breakpoint at a fixed composer-footer width.
+    assert ".composer-footer.cf-icons" in CSS, \
+        "icon-chip stage should be expressed as the .cf-icons stage class"
+    assert ".composer-footer.cf-burger" in CSS, \
+        "hamburger stage should be expressed as the .cf-burger stage class"
+    assert "composer-footer (max-width: 700px)" not in CSS, \
+        "the fixed 700px composer-footer container threshold should be gone"
+    assert "composer-footer (max-width: 520px)" not in CSS, \
+        "the fixed 520px composer-footer container threshold should be gone"
+    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    assert "_fitComposerFooter" in ui_js and "scrollWidth" in ui_js, \
+        "compact collapse should be JS fit-driven (scrollWidth overflow), not viewport-only"
+    assert "ResizeObserver" in ui_js, \
+        "compact collapse should re-run on footer resize, not at a fixed media breakpoint"
     assert re.search(r'@container\s+composer-footer\s*\(max-width:\s*860px\)', CSS) is None, \
         "Full icon-only should not be tied to a 860px threshold any more"
     assert re.search(r'@container\s+composer-footer\s*\(max-width:\s*1000px\)', CSS) is None, \
@@ -389,7 +411,7 @@ def test_composer_compact_switch_is_not_viewport_only():
         "Composer compact breakpoint should not be a dedicated 860px viewport media query"
     media_900 = _container_media_block(CSS, "900px")
     assert media_900 == "", \
-        "Composer compact breakpoint should use container queries, not viewport media at 900px"
+        "Composer compact breakpoint should be fit-driven, not viewport media at 900px"
 
 def test_mobile_overlay_present():
     """Mobile overlay element must exist for tap-to-close sidebar behavior."""
@@ -923,6 +945,43 @@ def test_mobile_composer_overflow_control_present():
         "mobile overflow panel must become visible when opened"
 
 
+def test_mobile_config_button_shows_hamburger_glyph():
+    """The config button must render a recognizable hamburger/menu glyph.
+
+    Previously the button's only visible content was the context-usage ring, so it
+    read as a stray "0" indicator instead of a menu — users could not find it. The
+    button now leads with a 3-line hamburger glyph; the context ring rides as a small
+    corner badge (#composerMobileCtxRingWrap) that JS only reveals when there is real
+    context usage. Both SVGs stay aria-hidden so the button keeps its single role.
+    """
+    btn_start = HTML.index('id="composerMobileConfigBtn"')
+    btn_end = HTML.index("</button>", btn_start)
+    btn_html = HTML[btn_start:btn_end]
+    assert 'class="composer-mobile-config-glyph"' in btn_html, \
+        "config button must lead with a hamburger/menu glyph so it reads as a menu"
+    glyph_start = btn_html.index('class="composer-mobile-config-glyph"')
+    glyph_tag = btn_html[btn_html.rfind("<", 0, glyph_start):btn_html.index("</svg>", glyph_start)]
+    assert glyph_tag.count("<line") == 3, \
+        "hamburger glyph must be three stacked lines"
+    assert "aria-hidden" in glyph_tag, \
+        "decorative hamburger glyph must be aria-hidden so it doesn't steal the button role"
+    # The context ring is demoted to a corner badge that defaults hidden (JS reveals it).
+    assert 'id="composerMobileCtxRingWrap"' in btn_html, \
+        "context ring must be wrapped in the corner badge container"
+    wrap_idx = btn_html.index('id="composerMobileCtxRingWrap"')
+    wrap_open = btn_html[btn_html.rfind("<", 0, wrap_idx):btn_html.index(">", wrap_idx) + 1]
+    assert "hidden" in wrap_open, \
+        "context ring badge must default to hidden so it only appears with real usage"
+    ring_wrap = _declarations(_rule_body(CSS, ".composer-mobile-ctx-ring-wrap"))
+    assert ring_wrap.get("position") == "absolute", \
+        "context ring badge must be absolutely positioned in the button corner"
+    assert ring_wrap.get("pointer-events") == "none", \
+        "context ring badge must not intercept clicks meant for the menu button"
+    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    assert "composerMobileCtxRingWrap" in ui_js, \
+        "ui.js must toggle the context ring badge by its wrapper id"
+
+
 def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
     """Model and reasoning controls must remain reachable through the phone overflow."""
     panel_start = HTML.index('id="composerMobileConfigPanel"')
@@ -938,11 +997,17 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "mobile reasoning action must reuse the existing reasoning dropdown"
     assert 'id="composerMobileModelLabel"' in panel_html, \
         "mobile model action must expose the selected model label"
+    assert 'id="composerMobileQuotaAction"' in panel_html, \
+        "mobile quota action must be inside the overflow panel"
+    assert 'id="composerMobileQuotaLabel"' in panel_html, \
+        "mobile quota action must expose the selected quota label"
     assert 'id="composerMobileReasoningLabel"' in panel_html, \
         "mobile reasoning action must expose the selected reasoning label"
     ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
     assert "composerMobileModelAction" in ui_js, \
         "model dropdown positioning/click handling must know the mobile model action"
+    assert "composerMobileQuotaAction" in ui_js, \
+        "quota sync must know the mobile quota action"
     assert "composerMobileReasoningAction" in ui_js, \
         "reasoning dropdown positioning/click handling must know the mobile reasoning action"
 
@@ -953,6 +1018,20 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "phone width must hide the footer reasoning chip behind overflow"
     assert ".composer-mobile-config-action" in mobile_css, \
         "mobile overflow panel must size the model/reasoning actions"
+
+
+def test_mobile_overflow_panel_quota_order_matches_desktop_sequence():
+    """The mobile overflow panel should keep the same shared control order as desktop."""
+    panel_start = HTML.index('id="composerMobileConfigPanel"')
+    panel_end = HTML.index('<div class="profile-dropdown"', panel_start)
+    panel_html = HTML[panel_start:panel_end]
+    workspace_idx = panel_html.index('id="composerMobileWorkspaceAction"')
+    model_idx = panel_html.index('id="composerMobileModelAction"')
+    quota_idx = panel_html.index('id="composerMobileQuotaAction"')
+    reasoning_idx = panel_html.index('id="composerMobileReasoningAction"')
+    context_idx = panel_html.index('id="composerMobileContextAction"')
+    assert workspace_idx < model_idx < quota_idx < reasoning_idx < context_idx, \
+        "mobile control order should mirror the desktop/shared control sequence"
 
 
 def test_model_and_reasoning_dropdowns_use_mobile_panel_anchors():
@@ -1153,6 +1232,10 @@ def test_mobile_composer_primary_controls_keep_touch_friendly_sizing():
         if selector != ".composer-mobile-config-action":
             assert declarations.get("min-width") == "44px", \
                 f"{selector} must keep a 44px minimum width on phones"
+    assert _declarations(_rule_body(CSS, ".provider-quota-chip")).get("order") == "1", \
+        "quota chip should keep the same order across desktop and mobile widths"
+    assert _declarations(_rule_body(CSS, ".composer-mobile-config-btn")).get("order") == "2", \
+        "mobile config/context button should keep the same order across desktop and mobile widths"
 
     send = _declarations(_rule_body(mobile_css, ".send-btn"))
     assert send.get("width") == "44px", ".send-btn must keep 44px width on phones"

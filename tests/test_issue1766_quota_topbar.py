@@ -46,4 +46,9 @@ def test_quota_indicator_formats_openrouter_and_account_limit_shapes():
     assert "limit_remaining" in UI_JS
     assert "account_limits" in UI_JS
     assert "remaining_percent" in UI_JS
+    assert "label:remaining" in UI_JS
+    assert "label:provider+' '+remaining" not in UI_JS
     assert "provider-quota-chip" in CSS
+    # The chip must be visible by default in the composer footer; it only
+    # collapses into the config menu at very narrow (superthin) container widths.
+    assert ".provider-quota-chip{display:inline-flex" in CSS
