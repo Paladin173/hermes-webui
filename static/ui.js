@@ -3615,7 +3615,10 @@ window.addEventListener('resize',function(){
 // Stage classes on .composer-footer (see style.css):
 //   (none) full labels · .cf-icons icon chips · .cf-icons.cf-burger hamburger.
 let _composerFitScheduled=false;
-let _composerFitObserversBound=false;
+let _composerFitResizeObserver=null;
+let _composerFitMutationObserver=null;
+let _composerFitObservedFooter=null;
+let _composerFitResizeListenerBound=false;
 
 function _fitComposerFooter(){
   const footer=document.querySelector('.composer-footer');
@@ -3652,25 +3655,43 @@ function _initComposerFooterFit(){
   const left=footer&&footer.querySelector('.composer-left');
   if(!footer||!left) return;
   _scheduleComposerFit();
-  if(_composerFitObserversBound) return;
-  _composerFitObserversBound=true;
+  // Re-bind observers only when the footer element actually changes (e.g. a
+  // future unmount/re-mount). Keeping references lets us disconnect the stale
+  // observers first so the new footer is watched and the fit keeps working,
+  // instead of latching a one-shot "already bound" flag that would silently
+  // stop observing after a re-mount.
+  if(_composerFitObservedFooter===footer) return;
+  if(_composerFitResizeObserver){try{_composerFitResizeObserver.disconnect();}catch(_){ }}
+  if(_composerFitMutationObserver){try{_composerFitMutationObserver.disconnect();}catch(_){ }}
+  _composerFitResizeObserver=null;
+  _composerFitMutationObserver=null;
+  _composerFitObservedFooter=footer;
   // Footer width changes (window / sidebar / right-panel). Toggling the stage
   // classes does NOT change the footer's own width, so this never loops.
   if(window.ResizeObserver){
-    try{new ResizeObserver(_scheduleComposerFit).observe(footer);}catch(_){ }
+    try{
+      _composerFitResizeObserver=new ResizeObserver(_scheduleComposerFit);
+      _composerFitResizeObserver.observe(footer);
+    }catch(_){ }
   }
   // Content changes (model/profile/workspace/reasoning labels, chip show/hide)
   // change scrollWidth without changing footer width — watch the left cluster.
   // We never mutate left's own DOM in the fit, so this can't loop either.
   if(window.MutationObserver){
     try{
-      new MutationObserver(_scheduleComposerFit).observe(left,{
+      _composerFitMutationObserver=new MutationObserver(_scheduleComposerFit);
+      _composerFitMutationObserver.observe(left,{
         childList:true,subtree:true,characterData:true,
         attributes:true,attributeFilter:['class','style','hidden']
       });
     }catch(_){ }
   }
-  window.addEventListener('resize',_scheduleComposerFit);
+  // The window resize listener targets the stable _scheduleComposerFit and is
+  // independent of which footer element is mounted, so bind it just once.
+  if(!_composerFitResizeListenerBound){
+    window.addEventListener('resize',_scheduleComposerFit);
+    _composerFitResizeListenerBound=true;
+  }
 }
 window._initComposerFooterFit=_initComposerFooterFit;
 
