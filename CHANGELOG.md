@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The app shell (`/`, `/index.html`, `/session/<id>`) is now served from an in-process template cache instead of re-reading and re-rendering `static/index.html` (~190 KB) on every navigation.** These are the hottest routes; each request previously re-read the file from disk and re-applied two process-constant token substitutions (`__WEBUI_VERSION__`, `__MAX_UPLOAD_BYTES__`). The partially rendered template is now cached and invalidated on `(size, mtime_ns)` change — mirroring the existing static-asset cache — so a redeploy is still picked up without a restart. The per-session CSRF token and runtime extension tags are still applied per request, so output is byte-identical to before. Measured ~5× faster shell render in a local microbenchmark and removes per-request extension-manifest disk reads.
+
 ## [v0.51.602] — 2026-06-23 — Release VI (sidebar fetches only the active source bucket)
 
 ### Changed

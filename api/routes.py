@@ -8849,6 +8849,48 @@ def _save_saved_prompts(prompts: list) -> None:
     p.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# In-process cache for the app-shell template. The `/`, `/index.html`, and
+# `/session/<id>` routes are the hottest navigations and each re-read the
+# ~190 KB static/index.html from disk and re-ran the two process-constant
+# substitutions (__WEBUI_VERSION__, __MAX_UPLOAD_BYTES__) on every request.
+# Those values are fixed for the process lifetime, so we cache the partially
+# rendered template here, keyed by (size, nanosecond mtime) exactly like
+# _STATIC_CACHE so a redeploy is picked up without a restart. The two values
+# that genuinely vary per request — the per-session CSRF token and the runtime
+# extension tags (inject_extension_tags) — are still applied on each request
+# against the cached base, so caching changes no observable output.
+_INDEX_SHELL_CACHE: dict = {}
+_INDEX_SHELL_CACHE_LOCK = threading.Lock()
+
+
+def _render_index_shell_base() -> str:
+    """Return static/index.html with the process-constant tokens substituted.
+
+    Cached and invalidated on (size, mtime_ns) change. The CSRF token and
+    extension-tag injection are intentionally NOT applied here — they vary per
+    request and are applied by the caller against this base string.
+    """
+    from api.updates import WEBUI_VERSION
+
+    st = _INDEX_HTML_PATH.stat()
+    sig = (st.st_size, st.st_mtime_ns)
+    with _INDEX_SHELL_CACHE_LOCK:
+        cached = _INDEX_SHELL_CACHE.get("base")
+        if cached and cached[0] == sig:
+            return cached[1]
+    from urllib.parse import quote
+
+    version_token = quote(WEBUI_VERSION, safe="")
+    base = (
+        _INDEX_HTML_PATH.read_text(encoding="utf-8")
+        .replace("__WEBUI_VERSION__", version_token)
+        .replace("__MAX_UPLOAD_BYTES__", str(MAX_UPLOAD_BYTES))
+    )
+    with _INDEX_SHELL_CACHE_LOCK:
+        _INDEX_SHELL_CACHE["base"] = (sig, base)
+    return base
+
+
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
 
@@ -8870,9 +8912,6 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path in ("/", "/index.html") or parsed.path.startswith("/session/"):
         try:
-            from urllib.parse import quote
-            from api.updates import WEBUI_VERSION
-            version_token = quote(WEBUI_VERSION, safe="")
             from api.extensions import inject_extension_tags
 
             csrf_token = ""
@@ -8886,11 +8925,11 @@ def handle_get(handler, parsed) -> bool:
             except Exception:
                 csrf_token = ""
 
-            html = (
-                _INDEX_HTML_PATH.read_text(encoding="utf-8")
-                .replace("__WEBUI_VERSION__", version_token)
-                .replace("__MAX_UPLOAD_BYTES__", str(MAX_UPLOAD_BYTES))
-                .replace("__CSRF_TOKEN_JSON__", json.dumps(csrf_token))
+            # The disk read + process-constant token substitutions are cached;
+            # only the per-session CSRF token and per-request extension tags are
+            # applied here (see _render_index_shell_base).
+            html = _render_index_shell_base().replace(
+                "__CSRF_TOKEN_JSON__", json.dumps(csrf_token)
             )
             return t(
                 handler,
