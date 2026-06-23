@@ -484,6 +484,7 @@ def test_session_list_response_omits_bucket_counts_when_missing(monkeypatch):
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_scope_mismatch_error_path_respects_sidebar_source():
     src = SESSIONS_JS.read_text(encoding="utf-8")
+    purge_fn = _extract_function(src, "_purgeStaleInflightEntries")
     clear_fn = _extract_function(src, "_clearSessionSourceTabCounts")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")
     query_fn = _extract_function(src, "_sessionListQueryString")
@@ -511,16 +512,21 @@ global._showSessionListLoadError = error => {{
   global._lastError = error.message;
 }};
 const renders = [];
+const cleared = [];
 global.renderSessionListFromCache = () => {{
+  _purgeStaleInflightEntries();
   renders.push({{
     sessions: Array.isArray(global._allSessions) ? global._allSessions.map(s => s.session_id) : null,
     scope: global._allSessionsScope ? {{ ...global._allSessionsScope }} : null,
     webui: global._serverWebuiSessionCount,
     cli: global._serverCliSessionCount,
     skeleton: global._sessionListSkeletonActive,
+    inflightKeys: Object.keys(global.INFLIGHT || {{}}).sort(),
   }});
 }};
 global.api = () => Promise.reject(new Error('boom'));
+global.clearInflightState = sid => cleared.push(sid);
+{purge_fn}
 {clear_fn}
 {requested_source_fn}
 {query_fn}
@@ -533,6 +539,9 @@ async function runCase(requestedSource, cachedSource) {{
     allProfiles: false,
     sidebarSource: cachedSource,
   }};
+  global._sessionListSourceById = new Map([['webui-live', 'webui']]);
+  global.INFLIGHT = {{ 'webui-live': {{ lastAssistantText: 'working' }} }};
+  cleared.length = 0;
   global._serverWebuiSessionCount = 11;
   global._serverCliSessionCount = 5;
   global._sessionListSkeletonActive = true;
@@ -546,6 +555,8 @@ async function runCase(requestedSource, cachedSource) {{
     cli: global._serverCliSessionCount,
     skeleton: global._sessionListSkeletonActive,
     error: global._lastError,
+    cleared: [...cleared],
+    inflightKeys: Object.keys(global.INFLIGHT || {{}}).sort(),
     render: renders[0] || null,
   }};
 }}
@@ -561,11 +572,18 @@ async function runCase(requestedSource, cachedSource) {{
     body = _run_node(script)
 
     assert body["mismatch"]["sessions"] == []
-    assert body["mismatch"]["scope"] is None
+    assert body["mismatch"]["scope"] == {
+        "profile": "default",
+        "allProfiles": False,
+        "sidebarSource": "cli",
+    }
     assert body["mismatch"]["webui"] is None
     assert body["mismatch"]["cli"] is None
     assert body["mismatch"]["skeleton"] is False
     assert body["mismatch"]["render"]["sessions"] == []
+    assert body["mismatch"]["inflightKeys"] == ["webui-live"]
+    assert body["mismatch"]["cleared"] == []
+    assert body["mismatch"]["render"]["inflightKeys"] == ["webui-live"]
     assert body["match"]["sessions"] == ["webui-1"]
     assert body["match"]["scope"] == {
         "profile": "default",

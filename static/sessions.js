@@ -3965,7 +3965,7 @@ async function _runRenderSessionListRefresh(opts, _gen){
       renderSessionListFromCache();
     } else {
       _allSessions = [];
-      _allSessionsScope = null;
+      _allSessionsScope = _curScope;
       _clearSessionSourceTabCounts();
       renderSessionListFromCache();
     }
