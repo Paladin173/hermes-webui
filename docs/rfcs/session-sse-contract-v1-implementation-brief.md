@@ -3,6 +3,7 @@
 - **Status:** Working draft
 - **Related RFC:** [session-sse-contract-v1.md](session-sse-contract-v1.md)
 - **Related Issue:** #4812
+- **Related consumer:** hermes-android Issue 10 (`docs/proposals/ISSUE_10_BACKGROUND_EXECUTION_PROPOSAL.md`)
 - **Created:** 2026-06-23
 
 You are working in the `hermes-webui` repository.
@@ -23,6 +24,9 @@ beneficial to web/desktop/CLI consumers as well.
 - This must be easy to configure by operators and easy for clients to consume.
 - Do not build Android-specific protocol behavior. Build a generic contract
   that Android can consume.
+- Prefer trusted route + concise summary fields in event payloads so Android,
+  desktop wrappers, and future native clients can deep-link without rebuilding
+  WebUI route logic.
 
 ## Deliverables
 
@@ -140,6 +144,14 @@ examples:
   - optional if the model/runtime supports explicit quiescent state
 - `keepalive`
   - periodic liveness event or SSE comment strategy; choose one and justify
+
+Optional extension events when approval/clarify state is needed by native or
+background consumers:
+
+- `approval_required`
+- `approval_resolved`
+- `clarify_required`
+- `clarify_resolved`
 
 If existing names differ, map them and document canonical naming plus
 aliases/deprecation strategy.

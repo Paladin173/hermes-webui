@@ -521,10 +521,33 @@ def _emit_bg_task_complete_events_now(session_id: str, payload: dict) -> int:
     # consumer that mutates it in place would silently corrupt all other
     # concurrent consumers' views. Shallow copies are sufficient — the payload
     # is a flat trimmed dict of scalars.
-    return (
+    emitted = (
         _emit_to_session_streams(session_id, "bg_task_complete", dict(payload))
         + _emit_to_session_streams(session_id, "process_complete", dict(payload))
     )
+    try:
+        from api.session_sse import EVENT_ACTIVITY_SUMMARY, publish_session_event, session_route
+
+        summary = str(payload.get("summary") or "Background task completed").strip()
+        contract_payload = {
+            "route": session_route(session_id),
+            "summary": summary,
+            "stage": "finalizing",
+        }
+        task_id = str(payload.get("task_id") or "").strip()
+        if task_id:
+            contract_payload["task_id"] = task_id
+            contract_payload["progress_hint"] = task_id
+        publish_session_event(
+            session_id,
+            EVENT_ACTIVITY_SUMMARY,
+            contract_payload,
+            meta={"source": "background_process", "legacy_event": "bg_task_complete"},
+            event_name=EVENT_ACTIVITY_SUMMARY,
+        )
+    except Exception:
+        logger.debug("session SSE activity_summary emit failed for %s", session_id, exc_info=True)
+    return emitted
 
 
 def _flush_coalesced_bg_task_complete(session_id: str) -> None:

@@ -166,6 +166,27 @@ def submit_pending(session_key: str, data: dict) -> _ClarifyEntry:
         cb = _gateway_notify_cbs.get(session_key)
         # Notify SSE subscribers from inside _lock for ordering guarantees.
         _clarify_sse_notify(session_key, dict(gw_queue[0].data), len(gw_queue))
+        current_head = dict(gw_queue[0].data)
+        current_total = len(gw_queue)
+    try:
+        from api.session_sse import EVENT_CLARIFY_REQUIRED, publish_session_event, session_route
+
+        publish_session_event(
+            session_key,
+            EVENT_CLARIFY_REQUIRED,
+            {
+                "route": session_route(session_key),
+                "clarify_id": str(current_head.get("clarify_id") or "").strip(),
+                "question": str(current_head.get("question") or "Clarification required").strip(),
+                "choices": list(current_head.get("choices_offered") or []),
+                "pending_count": int(current_total or 0),
+                "expires_at": current_head.get("expires_at"),
+            },
+            meta={"source": "clarify_queue", "origin": "submit_pending"},
+            event_name=EVENT_CLARIFY_REQUIRED,
+        )
+    except Exception:
+        pass
     publish_session_list_changed("attention_pending")
     if cb:
         try:
@@ -207,6 +228,8 @@ def resolve_clarify(session_key: str, response: str, resolve_all: bool = False) 
             _pending.pop(session_key, None)
             return 0
         entries = list(q) if resolve_all else [q.pop(0)]
+        next_total = len(q)
+        next_head = dict(q[0].data) if q else None
         if q:
             _pending[session_key] = q[0].data
             _clarify_sse_notify(session_key, dict(q[0].data), len(q))
@@ -219,6 +242,25 @@ def resolve_clarify(session_key: str, response: str, resolve_all: bool = False) 
         entry.result = response
         entry.event.set()
         count += 1
+    try:
+        from api.session_sse import EVENT_CLARIFY_RESOLVED, publish_session_event, session_route
+
+        for entry in entries:
+            publish_session_event(
+                session_key,
+                EVENT_CLARIFY_RESOLVED,
+                {
+                    "route": session_route(session_key),
+                    "clarify_id": str(entry.clarify_id or "").strip(),
+                    "response": str(response or "").strip(),
+                    "pending_count": int(next_total or 0),
+                    "next_clarify_id": str((next_head or {}).get("clarify_id") or "").strip() or None,
+                },
+                meta={"source": "clarify_queue", "origin": "resolve"},
+                event_name=EVENT_CLARIFY_RESOLVED,
+            )
+    except Exception:
+        pass
     return count
 
 
@@ -235,6 +277,8 @@ def resolve_clarify_by_id(session_key: str, clarify_id: str, response: str) -> b
         for i, entry in enumerate(q):
             if entry.clarify_id == clarify_id:
                 q.pop(i)
+                next_total = len(q)
+                next_head = dict(q[0].data) if q else None
                 if q:
                     _pending[session_key] = q[0].data
                     _clarify_sse_notify(session_key, dict(q[0].data), len(q))
@@ -246,5 +290,23 @@ def resolve_clarify_by_id(session_key: str, clarify_id: str, response: str) -> b
                 publish_session_list_changed("attention_resolved")
                 entry.result = response
                 entry.event.set()
+                try:
+                    from api.session_sse import EVENT_CLARIFY_RESOLVED, publish_session_event, session_route
+
+                    publish_session_event(
+                        session_key,
+                        EVENT_CLARIFY_RESOLVED,
+                        {
+                            "route": session_route(session_key),
+                            "clarify_id": str(entry.clarify_id or "").strip(),
+                            "response": str(response or "").strip(),
+                            "pending_count": int(next_total or 0),
+                            "next_clarify_id": str((next_head or {}).get("clarify_id") or "").strip() or None,
+                        },
+                        meta={"source": "clarify_queue", "origin": "resolve_by_id"},
+                        event_name=EVENT_CLARIFY_RESOLVED,
+                    )
+                except Exception:
+                    pass
                 return True
         return False

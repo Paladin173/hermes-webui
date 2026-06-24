@@ -10099,6 +10099,10 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == '/api/sessions/events':
         return _handle_session_events_stream(handler)
 
+    session_contract_sid = _match_session_contract_events_path(parsed.path)
+    if session_contract_sid is not None:
+        return _handle_session_contract_sse_stream(handler, parsed, session_contract_sid)
+
     if parsed.path == "/api/media":
         return _handle_media(handler, parsed)
 
@@ -13715,6 +13719,127 @@ def _handle_session_events_stream(handler):
     return True
 
 
+def _match_session_contract_events_path(path: str) -> str | None:
+    raw = str(path or "").strip()
+    if not raw.startswith("/api/sessions/") or not raw.endswith("/events"):
+        return None
+    parts = raw.split("/")
+    if len(parts) != 5:
+        return None
+    session_id = parts[3].strip()
+    return session_id or None
+
+
+def _handle_session_contract_sse_stream(handler, parsed, session_id: str):
+    from api.session_sse import (
+        EVENT_KEEPALIVE,
+        EVENT_SESSION_SNAPSHOT,
+        EVENT_TURN_PROGRESS,
+        build_session_event_envelope,
+        format_sse_frame,
+        get_or_create_session_event_stream,
+        session_route,
+        session_sse_enabled,
+        session_sse_heartbeat_seconds,
+    )
+
+    if not session_sse_enabled():
+        return j(handler, {"error": "not found"}, status=404)
+
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        return bad(handler, "session_id is required", status=400)
+
+    try:
+        session = get_session(normalized_session_id, metadata_only=True)
+    except Exception:
+        return j(handler, {"error": "not found"}, status=404)
+    if not session:
+        return j(handler, {"error": "not found"}, status=404)
+
+    qs = parse_qs(parsed.query or "")
+    since = (qs.get("since") or [None])[0]
+    if since is None:
+        try:
+            since = handler.headers.get("Last-Event-ID")
+        except Exception:
+            since = None
+    since = str(since or "").strip() or None
+    verbosity = str((qs.get("verbosity") or ["minimal"])[0] or "minimal").strip().lower()
+    if verbosity not in {"minimal", "full"}:
+        verbosity = "minimal"
+    requested: set[str] = {EVENT_SESSION_SNAPSHOT, EVENT_KEEPALIVE}
+    for raw_names in qs.get("events", []):
+        for raw_name in str(raw_names or "").split(","):
+            event_name = raw_name.strip()
+            if event_name:
+                requested.add(event_name)
+
+    def _allowed(event_type: str) -> bool:
+        normalized_event_type = str(event_type or "").strip()
+        if verbosity != "full" and normalized_event_type == EVENT_TURN_PROGRESS:
+            return False
+        if requested and normalized_event_type not in requested:
+            return False
+        return True
+
+    def _write_envelope(envelope: dict) -> None:
+        event_type = str(envelope.get("event_type") or "message")
+        if not _allowed(event_type):
+            return
+        handler.wfile.write(format_sse_frame(event_type, envelope))
+        handler.wfile.flush()
+
+    stream = get_or_create_session_event_stream(normalized_session_id)
+    q = stream.subscribe(maxsize=64)
+    try:
+        handler.send_response(200)
+        handler.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+        handler.send_header('Cache-Control', 'no-cache')
+        handler.send_header('X-Accel-Buffering', 'no')
+        end_sse_headers(handler)
+        _sse_set_write_deadline(handler)
+
+        found, replay = stream.replay_after(since)
+        if since and found:
+            for envelope in replay:
+                _write_envelope(envelope)
+        else:
+            active_turn_id = getattr(session, "active_stream_id", None)
+            snapshot = stream.snapshot_envelope(
+                {
+                    "route": session_route(normalized_session_id),
+                    "latest_sequence": stream.latest_sequence(),
+                    "stream_id": active_turn_id,
+                    "active_turn_id": active_turn_id,
+                    "run_state": "running" if active_turn_id else "idle",
+                    "summary": {},
+                }
+            )
+            _write_envelope(snapshot)
+
+        while True:
+            try:
+                _event_name, envelope = q.get(timeout=session_sse_heartbeat_seconds())
+            except queue.Empty:
+                keepalive = build_session_event_envelope(
+                    normalized_session_id,
+                    EVENT_KEEPALIVE,
+                    {"server_time": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")},
+                    sequence=stream.latest_sequence(),
+                )
+                _write_envelope(keepalive)
+                continue
+            if envelope is None:
+                break
+            _write_envelope(envelope)
+    except _CLIENT_DISCONNECT_ERRORS:
+        pass
+    finally:
+        stream.unsubscribe(q)
+    return True
+
+
 def _content_disposition_value(disposition: str, filename: str) -> str:
     """Build a latin-1-safe Content-Disposition value with RFC 5987 filename*."""
     import urllib.parse as _up
@@ -16714,6 +16839,28 @@ def start_session_turn(
         status = int((resp or {}).get("_status", 200) or 200)
         stream_id = (resp or {}).get("stream_id")
         if status < 400 and stream_id:
+            try:
+                from api.session_sse import EVENT_TURN_STARTED, publish_session_event, session_route
+
+                publish_session_event(
+                    session_id,
+                    EVENT_TURN_STARTED,
+                    {
+                        "route": session_route(session_id),
+                        "turn_id": str(stream_id),
+                        "stream_id": str(stream_id),
+                        "actor": "assistant",
+                        "input_preview": str(source or "start_session_turn")[:200],
+                        "started_at": int(time.time()),
+                    },
+                    turn_id=str(stream_id),
+                    meta={"source": str(source or "start_session_turn")},
+                    event_name=EVENT_TURN_STARTED,
+                )
+            except Exception:
+                logger.debug(
+                    "session SSE turn_started emit failed for session %s", session_id, exc_info=True
+                )
             from api.background_process import get_session_channel
 
             ch = get_session_channel(session_id)
@@ -18492,6 +18639,24 @@ def _resolve_approval_legacy(sid: str, approval_id: str, choice: str) -> bool:
     # making stale explicit ids bounded as not-active for Slice 3b.
     resolved = bool(pending) or bool(gateway_resolved) or not bool(approval_id)
     if resolved:
+        try:
+            from api.session_sse import EVENT_APPROVAL_RESOLVED, publish_session_event, session_route
+
+            publish_session_event(
+                sid,
+                EVENT_APPROVAL_RESOLVED,
+                {
+                    "route": session_route(sid),
+                    "approval_id": str((pending or {}).get("approval_id") or approval_id or "").strip(),
+                    "choice": str(choice or "deny").strip(),
+                    "pending_count": len(_pending.get(sid) or []) if isinstance(_pending.get(sid), list) else (1 if _pending.get(sid) else 0),
+                    "resolved_gateway": bool(gateway_resolved),
+                },
+                meta={"source": "approval_queue", "origin": "respond"},
+                event_name=EVENT_APPROVAL_RESOLVED,
+            )
+        except Exception:
+            logger.debug("session SSE approval_resolved emit failed for %s", sid, exc_info=True)
         publish_session_list_changed("attention_resolved")
     return resolved
 

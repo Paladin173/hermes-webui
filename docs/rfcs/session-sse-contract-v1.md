@@ -4,6 +4,7 @@
 - **Author:** @Paladin173
 - **Created:** 2026-06-23
 - **Issue:** #4812
+- **Related consumer:** hermes-android Issue 10 background activity notification flow
 
 ## Problem
 
@@ -109,7 +110,9 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
   "latest_sequence": 128,
+  "stream_id": "optional-string",
   "active_turn_id": "optional-string",
   "run_state": "idle|running|failed|completed",
   "summary": {
@@ -127,9 +130,12 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
   "turn_id": "string",
+  "stream_id": "string",
   "actor": "user|assistant|system",
-  "input_preview": "optional-string"
+  "input_preview": "optional-string",
+  "started_at": 1761177600
 }
 ```
 
@@ -141,6 +147,8 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
+  "stream_id": "string",
   "turn_id": "string",
   "summary": "string",
   "stage": "planning|tooling|responding|finalizing",
@@ -156,6 +164,8 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
+  "stream_id": "string",
   "turn_id": "string",
   "kind": "thinking|tool_call|tool_result|text_chunk",
   "content": "string",
@@ -171,6 +181,8 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
+  "stream_id": "string",
   "turn_id": "string",
   "status": "success",
   "output_summary": "optional-string"
@@ -185,6 +197,8 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
+  "stream_id": "string",
   "turn_id": "string",
   "status": "error",
   "error": {
@@ -203,6 +217,8 @@ Payload:
 
 ```json
 {
+  "route": "/session/session_123",
+  "stream_id": "optional-string",
   "reason": "turn_settled|timeout|manual_stop"
 }
 ```
@@ -224,6 +240,87 @@ Payload:
   "server_time": "2026-06-23T12:35:12.100Z"
 }
 ```
+
+### Optional attention events
+
+These are optional v1 extension events for clients that need pending approval
+or clarify state without polling.
+
+### `approval_required`
+
+Purpose: surface a pending approval prompt in a session-scoped,
+notification-safe form.
+
+Payload:
+
+```json
+{
+  "route": "/session/session_123",
+  "approval_id": "approval_789",
+  "description": "Allow write access?",
+  "choices": ["once", "session", "always", "deny"],
+  "pending_count": 1
+}
+```
+
+### `approval_resolved`
+
+Purpose: tell clients that a pending approval was answered or cleared.
+
+Payload:
+
+```json
+{
+  "route": "/session/session_123",
+  "approval_id": "approval_789",
+  "choice": "once",
+  "pending_count": 0,
+  "resolved_gateway": false
+}
+```
+
+### `clarify_required`
+
+Purpose: surface a pending clarify prompt with its stable prompt id.
+
+Payload:
+
+```json
+{
+  "route": "/session/session_123",
+  "clarify_id": "clarify_456",
+  "question": "Choose a deployment target",
+  "choices": ["staging", "prod"],
+  "pending_count": 1,
+  "expires_at": 1761177612
+}
+```
+
+### `clarify_resolved`
+
+Purpose: tell clients that a clarify prompt was answered or expired/cleared.
+
+Payload:
+
+```json
+{
+  "route": "/session/session_123",
+  "clarify_id": "clarify_456",
+  "response": "staging",
+  "pending_count": 0,
+  "next_clarify_id": null
+}
+```
+
+Schema notes:
+
+- `route` SHOULD be a trusted in-app session route so browser, desktop, and
+  Android/native consumers can deep-link to the active session without
+  rebuilding route logic client-side.
+- `stream_id` SHOULD be present for turn-scoped lifecycle and progress events
+  when the runtime already has one.
+- Attention events are optional extensions; clients that do not implement them
+  MUST ignore them like any other unknown event type.
 
 ### Canonical Naming and Alias Strategy
 
@@ -347,6 +444,8 @@ Error payload policy:
 ## Cross-Platform Benefits
 
 - Android: background reconnect with deterministic replay and dedupe.
+- Android: background notifications can show concise summary text plus a trusted
+  session route without consuming the raw token stream.
 - Web: multi-tab synchronization and reliable resume after transient disconnect.
 - Desktop wrappers: stable stream primitive for host-level notifications.
 - CLI/observers: machine-parsable, versioned event stream with replay controls.

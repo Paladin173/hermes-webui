@@ -6034,6 +6034,26 @@ def _run_agent_streaming(
             q.put_nowait(queue_item)
         except Exception:
             logger.debug("Failed to put event to queue")
+        try:
+            from api.session_sse import legacy_session_event_to_contract, publish_session_event
+
+            mapped = legacy_session_event_to_contract(session_id, stream_id, event, data)
+            for event_type, payload in mapped:
+                publish_session_event(
+                    session_id,
+                    event_type,
+                    payload,
+                    turn_id=str(stream_id),
+                    meta={"source": "chat_stream", "legacy_event": str(event)},
+                    event_name=event_type,
+                )
+        except Exception:
+            logger.debug(
+                "Failed to publish session SSE contract event %s for stream %s",
+                event,
+                stream_id,
+                exc_info=True,
+            )
 
     def _agent_status_callback(kind, message):
         """Bridge Agent lifecycle status into WebUI SSE.
