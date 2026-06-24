@@ -3,6 +3,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added RFC `docs/rfcs/session-sse-contract-v1.md`, defining a proposed
+  cross-platform, session-scoped, resumable SSE contract with canonical event
+  envelope/types, ordering/dedupe semantics, replay/heartbeat behavior,
+  configuration knobs, and staged rollout guidance.
+- Added companion planning note
+  `docs/rfcs/session-sse-contract-v1-implementation-brief.md` for issue #4812
+  so the implementation scope and acceptance criteria are tracked in-repo.
+
 ## [v0.51.614] — 2026-06-23 — Release VU (Kanban consolidated view toggle)
 
 ### Added

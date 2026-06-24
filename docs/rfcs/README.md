@@ -66,3 +66,9 @@ First-time contributor RFCs should be discussed in an issue before opening a PR.
   #3058 control-surface companion to #3400 for Queue, Steer, Stop-and-send,
   Interrupt, and leftover-steer inputs submitted while a long-running agent
   session is active.
+- [`session-sse-contract-v1.md`](session-sse-contract-v1.md) — proposed
+  cross-platform, session-scoped, resumable SSE event contract with canonical
+  envelope/event semantics, replay, dedupe, and rollout guidance.
+- [`session-sse-contract-v1-implementation-brief.md`](session-sse-contract-v1-implementation-brief.md)
+  — working implementation brief for issue #4812, including scope,
+  deliverables, acceptance criteria, and PR-output requirements.
