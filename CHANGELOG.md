@@ -9,9 +9,23 @@
   cross-platform, session-scoped, resumable SSE contract with canonical event
   envelope/types, ordering/dedupe semantics, replay/heartbeat behavior,
   configuration knobs, and staged rollout guidance.
+- Documented the session SSE contract's "Relationship to Existing Streams" in
+  that RFC: the stream is a read-only aggregator that re-publishes from existing
+  authorities (`/api/chat/stream`, `/api/approval/stream`, `/api/clarify/stream`,
+  `/api/session/stream`) rather than a parallel or replacement channel, with a
+  per-event producer mapping. Answers the #4812 design-review question.
 - Added companion planning note
   `docs/rfcs/session-sse-contract-v1-implementation-brief.md` for issue #4812
   so the implementation scope and acceptance criteria are tracked in-repo.
+
+### Fixed
+
+- Session SSE contract heartbeat now defaults to `5s` to match the existing
+  `_SSE_HEARTBEAT_INTERVAL_SECONDS` invariant (#1623): the previous `15s`
+  default violated `heartbeat * 2 <= 25s` kernel TCP keepalive window, so on
+  flaky networks the contract socket could be torn down before its first
+  keepalive. Pinned by a regression test in
+  `tests/test_issue1623_sse_heartbeat_alignment.py`. (#4812)
 
 ## [v0.51.614] — 2026-06-23 — Release VU (Kanban consolidated view toggle)
 

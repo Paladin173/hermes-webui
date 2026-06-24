@@ -59,6 +59,58 @@ normative requirements.
 - Default: `false` (opt-in rollout).
 - When disabled, endpoint returns `404` to avoid accidental client coupling.
 
+## Relationship to Existing Streams
+
+This is the core architectural decision raised in the design review (#4812): is
+this a **superset** of the existing real-time endpoints, or a **parallel**
+channel that duplicates their semantics?
+
+**Decision: this stream is a read-only _aggregator_, not a new authority and not
+a replacement.** It does not own any session, turn, approval, or clarify state.
+Every contract event is re-published from the existing authority at the same
+emit site that already feeds the legacy live paths, so the contract stream can
+never diverge from or race the source of truth. The legacy endpoints continue to
+exist unchanged; this contract layers one unified, versioned, resumable
+session-lifecycle view over them behind the feature flag.
+
+### Existing real-time endpoints (unchanged)
+
+| Endpoint | Scope | Role | Status under this RFC |
+|----------|-------|------|-----------------------|
+| `/api/chat/stream` | per-turn | Token/tool/reasoning stream backed by the run journal (`STREAM_LAST_EVENT_ID` resume). | **Authority.** Unchanged. Remains the high-fidelity per-turn transport. |
+| `/api/sessions/events` | global | Sidebar/session-list invalidation bus (`Last-Event-ID`). | **Authority.** Unchanged. Out of scope for per-session lifecycle. |
+| `/api/session/stream` | per-session | Cross-turn persistent channel for `bg_task_complete` (Option X). | **Authority.** Unchanged. Source for `activity_summary`. |
+| `/api/approval/stream` | per-session | Pending-approval poller. | **Authority.** Unchanged. Source for `approval_*`. |
+| `/api/clarify/stream` | per-session | Pending-clarify poller. | **Authority.** Unchanged. Source for `clarify_*`. |
+| `/api/sessions/gateway/stream` | gateway | Gateway sync. | Unchanged. Not aggregated in Phase 1. |
+
+### Event → producer mapping
+
+Each canonical event is a projection of an existing authority. No event
+introduces a new source of truth.
+
+| Contract event | Authoritative producer | Aggregation site |
+|----------------|------------------------|------------------|
+| `session_snapshot` | Session store + active stream id | Built on subscribe in the contract handler (`api/routes.py`). |
+| `turn_started` | Turn/chat lifecycle | `start_session_turn` (`api/routes.py`), re-published alongside the chat stream. |
+| `turn_progress` | Chat stream (`reasoning`) | `legacy_session_event_to_contract` tap in `api/streaming.py`. |
+| `activity_summary` | Chat stream (`interim_assistant`, `tool`, `tool_complete`) + background tasks (`bg_task_complete`) | `api/streaming.py` tap and `api/background_process.py`. |
+| `turn_completed` / `turn_failed` / `session_idle` | Chat stream (`done`, `cancel`, `apperror`) | `legacy_session_event_to_contract` tap in `api/streaming.py`. |
+| `approval_required` | Approval queue | `api/route_approvals.py`. |
+| `approval_resolved` | Approval queue | Approval respond path (`api/routes.py`). |
+| `clarify_required` / `clarify_resolved` | Clarify queue | `api/clarify.py`. |
+| `keepalive` | Contract handler timer | Emitted by the stream handler itself (see Heartbeat). |
+
+### Consequences
+
+- The contract stream is **at-least-once and dedupe-safe** (`event_id`), so a
+  client MAY consume both `/api/chat/stream` and this contract concurrently
+  during migration; the WebUI frontend already dedupes by `stream_id`.
+- Because every event mirrors an existing emit, **disabling the feature flag
+  removes the aggregator with zero impact** on legacy consumers.
+- This stream is **not** a write path: it never resolves approvals/clarifies or
+  drives turns. Those continue to flow through their existing POST endpoints.
+
 ## Event Envelope
 
 All non-comment SSE messages carry JSON with this envelope.
@@ -233,6 +285,13 @@ Justification:
 - Easier to test, meter, and observe in logs.
 - Works uniformly for browser EventSource, desktop wrappers, and CLI readers.
 
+Heartbeat interval MUST satisfy the same constraint as the existing SSE handlers
+(see #1623): `heartbeat_seconds * 2 <= kernel TCP keepalive window`. The repo
+pins that window at `KEEPIDLE(10s) + KEEPINTVL(5s) * KEEPCNT(3) = 25s` and uses a
+shared `_SSE_HEARTBEAT_INTERVAL_SECONDS = 5` for every other stream, so this
+contract inherits the same `5s` default rather than introducing a divergent
+timer that could be torn down by the kernel before the first keepalive.
+
 Payload:
 
 ```json
@@ -384,7 +443,8 @@ with current sequence progression.
 ### Server-Level Knobs
 
 - `HERMES_WEBUI_SESSION_SSE_ENABLED=false`
-- `HERMES_WEBUI_SESSION_SSE_HEARTBEAT_SECONDS=15`
+- `HERMES_WEBUI_SESSION_SSE_HEARTBEAT_SECONDS=5` (MUST keep `value * 2 <= 25s`
+  kernel keepalive window; see #1623)
 - `HERMES_WEBUI_SESSION_SSE_REPLAY_MAX_EVENTS=500`
 - `HERMES_WEBUI_SESSION_SSE_REPLAY_MAX_SECONDS=900`
 - `HERMES_WEBUI_SESSION_SSE_SUMMARY_MAX_BYTES=8192`

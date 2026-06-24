@@ -53,7 +53,8 @@
       pruneSeenIds();
       lastEventId = envelope.event_id;
       if(envelope.sequence > lastSequence) lastSequence = envelope.sequence;
-      return {status, envelope};
+      if(status === 'stale') return {status:'stale', envelope};
+      return {status:'applied', envelope};
     }
 
     return {

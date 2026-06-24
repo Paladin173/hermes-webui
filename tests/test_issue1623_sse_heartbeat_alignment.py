@@ -51,6 +51,30 @@ def test_sse_heartbeat_constant_below_kernel_keepalive_window():
     )
 
 
+def test_session_sse_contract_heartbeat_default_below_kernel_keepalive_window():
+    """The session SSE contract aggregator (#4812) is a sixth SSE handler and
+    MUST honor the same #1623 invariant: its default heartbeat fires at most
+    every kernel_window / 2 seconds. A divergent default (e.g. 15s) would let
+    the kernel tear down the contract socket before its first keepalive."""
+    import re
+
+    sse_src = (REPO / "api" / "session_sse.py").read_text(encoding="utf-8")
+    m = re.search(r"DEFAULT_HEARTBEAT_SECONDS\s*=\s*(\d+)", sse_src)
+    assert m, "Could not parse DEFAULT_HEARTBEAT_SECONDS literal"
+    heartbeat = int(m.group(1))
+
+    server_src = (REPO / "server.py").read_text(encoding="utf-8")
+    keepidle = int(re.search(r"TCP_KEEPIDLE.*?(\d+)\)", server_src, re.S).group(1))
+    keepintvl = int(re.search(r"TCP_KEEPINTVL.*?(\d+)\)", server_src, re.S).group(1))
+    keepcnt = int(re.search(r"TCP_KEEPCNT.*?(\d+)\)", server_src, re.S).group(1))
+    kernel_window = keepidle + keepintvl * keepcnt
+
+    assert heartbeat * 2 <= kernel_window, (
+        f"Session SSE contract heartbeat default ({heartbeat}s) must be at most "
+        f"half of the kernel keepalive window ({kernel_window}s). (#1623/#4812)"
+    )
+
+
 def test_no_sse_handler_uses_30s_or_higher_timeout():
     """No SSE/long-poll handler in routes.py should still be using the old
     30s/25s timeout. Every queue.get(timeout=...) call inside an SSE handler

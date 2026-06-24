@@ -51,7 +51,12 @@ CANONICAL_EVENT_TYPES = frozenset(
     }
 )
 
-DEFAULT_HEARTBEAT_SECONDS = 15
+# Heartbeat must satisfy the existing SSE invariant (#1623): the app heartbeat
+# fires at well under half the kernel TCP keepalive window
+# (KEEPIDLE 10s + KEEPINTVL 5s * KEEPCNT 3 = 25s). Every other SSE handler uses
+# _SSE_HEARTBEAT_INTERVAL_SECONDS = 5; this contract inherits the same default
+# so the aggregator stream cannot be torn down before its first keepalive.
+DEFAULT_HEARTBEAT_SECONDS = 5
 DEFAULT_REPLAY_MAX_EVENTS = 500
 DEFAULT_REPLAY_MAX_SECONDS = 900
 
