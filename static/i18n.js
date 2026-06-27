@@ -1,4 +1,4 @@
-// ── i18n: locale bundles and t() helper ──────────────────────────────────────
+﻿// ── i18n: locale bundles and t() helper ──────────────────────────────────────
 // To add a new language: add an entry to LOCALES below with all keys translated.
 // The language code must match a valid BCP 47 tag (used for speech recognition).
 // Keys missing in a non-English locale fall back to English automatically.

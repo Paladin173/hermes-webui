@@ -79,7 +79,6 @@ def test_footer_control_chips_rendered_in_panels():
     """panels.js must render the primary + situational control chips and apply
     the visibility settings live."""
     assert "_renderComposerControlChips" in PANELS_JS
-    assert "_renderComposerSituationalControlChips" in PANELS_JS
     assert "_ensureComposerControlVisibilityState" in PANELS_JS
     assert "_applyComposerFooterVisibilitySettings" in PANELS_JS
 
@@ -102,6 +101,7 @@ def test_composer_control_order_is_persisted_and_draggable(monkeypatch, tmp_path
             "hide_composer_model",
             "",
             42,
+            "hide_composer_fake",
             "hide_composer_workspace",
         ]
     })
@@ -140,9 +140,8 @@ def test_composer_control_order_frontend_contracts():
     assert "composer_control_order: _getComposerControlOrder()" in PANELS_JS
     assert "composer_control_order" in CONFIG_PY
 
-    render_body = PANELS_JS[PANELS_JS.index("function _renderComposerControlChips("):PANELS_JS.index("function _renderComposerSituationalControlChips(")]
-    situational_body = PANELS_JS[PANELS_JS.index("function _renderComposerSituationalControlChips("):PANELS_JS.index("function _applySavedSettingsUi(")]
-    assert "_COMPOSER_CONTROL_FALLBACK_DEFS" in PANELS_JS
+    render_body = PANELS_JS[PANELS_JS.index("function _renderComposerControlChips("):PANELS_JS.index("function switchSettingsSection(")]
+    assert "_COMPOSER_CONTROL_FALLBACK_DEFS" not in PANELS_JS
     assert "_composerControlDefsForSettings" in PANELS_JS
     assert "_orderedComposerControlDefsForSettings" in render_body
     assert "_composerControlDefsForSettings()" in render_body
@@ -153,8 +152,7 @@ def test_composer_control_order_frontend_contracts():
     assert "document.elementFromPoint" in PANELS_JS
     assert "_composerControlPointerDrag" in PANELS_JS
     assert "const sourceKey=e&&e.dataTransfer" in PANELS_JS
-    assert "container.innerHTML='';" in situational_body
-    assert "_wireComposerControlChipDrag" not in situational_body
+    assert "_renderComposerSituationalControlChips" not in PANELS_JS
     assert "draggable" in PANELS_JS
     assert "dragstart" in PANELS_JS and "drop" in PANELS_JS
     assert "_composerControlDragSuppressUntil" in PANELS_JS and "Date.now()+250" in PANELS_JS
