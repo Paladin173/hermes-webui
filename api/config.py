@@ -7718,6 +7718,7 @@ _SETTINGS_DEFAULTS = {
     "hide_composer_status": False,  # hide status text in composer footer
     "hide_composer_context": False,  # hide context indicator in composer footer/mobile config panel
     "hide_composer_bg_badge": False,  # hide background-jobs badge in composer footer
+    "composer_control_order": [],  # user-defined composer footer control order
     "pinned_sessions_limit": 3,  # maximum active pinned sessions shown in the sidebar
     "inflight_state_max_sessions": 8,  # max active-stream recovery snapshots kept in browser localStorage
     "inflight_state_max_messages": 24,  # max recent messages kept per recovery snapshot
@@ -8047,10 +8048,10 @@ def save_settings(settings: dict) -> dict:
                 not isinstance(v, str) or not _SETTINGS_LANG_RE.match(v)
             ):
                 continue
-            # Validate list-valued sidebar tab settings. Chat/settings stay fixed
-            # even if a tampered POST tries to persist them, and duplicates are
-            # collapsed while preserving the first requested order.
-            if k in {"hidden_tabs", "tab_order"}:
+            # Validate list-valued order/visibility settings. Chat/settings stay
+            # fixed for sidebar tabs even if a tampered POST tries to persist
+            # them, and duplicates are collapsed while preserving first order.
+            if k in {"hidden_tabs", "tab_order", "composer_control_order"}:
                 if not isinstance(v, list):
                     continue
                 seen = set()
@@ -8059,7 +8060,7 @@ def save_settings(settings: dict) -> dict:
                     if not isinstance(s, str):
                         continue
                     s = s.strip()
-                    if not s or s in {"chat", "settings"} or s in seen:
+                    if not s or (k in {"hidden_tabs", "tab_order"} and s in {"chat", "settings"}) or s in seen:
                         continue
                     seen.add(s)
                     cleaned.append(s)
