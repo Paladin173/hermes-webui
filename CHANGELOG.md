@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The composer footer can now compact based on actual control overflow instead of fixed 700px/520px footer thresholds.** The footer measures the left control cluster and steps through full labels, icon chips, and hamburger consolidation only when the visible controls need it. The model chip now drops redundant provider prefixes, reasoning effort labels are shorter/title-cased, and the optional provider quota chip leads with the remaining value while keeping provider detail in the tooltip. Thanks @Paladin173. (#4657 follow-up)
+
 ### Fixed
 
 - **Manual `/compress` now sticks across reloads and restarts instead of springing back to the old context size.** A manual compression shrinks the model-facing context but the old transcript could return through two paths: (1) append-only `state.db` reconciliation re-appending pre-compression rows, and (2) startup `.bak` recovery treating the intentional shrink as data loss. `/compress` now persists a truncation watermark/boundary (so reconciliation stops replaying pre-compression rows), refreshes the post-compression token metric, and drops the now-stale backup. Crucially, the `.bak` safeguard is only suppressed for the *pre-compression* backup whose restore would undo the shrink (detected by content — its model-facing context is still the larger uncompressed one) — a backup written *after* the compression that captures genuine post-compression data loss is **still recovered**, so manual compression can never permanently disable crash-recovery for that session. Thanks @hyl-ailab. (#4986, fixes #4836)
