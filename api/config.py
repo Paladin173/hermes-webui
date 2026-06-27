@@ -7753,6 +7753,9 @@ _SETTINGS_LEGACY_DROP_KEYS = {
     "activity_feed_expanded_default",
     "simplified_tool_calling",
 }
+_COMPOSER_CONTROL_ORDER_KEYS = {
+    key for key in _SETTINGS_DEFAULTS if key.startswith("hide_composer_")
+}
 _SETTINGS_THEME_VALUES = {"light", "dark", "system"}
 _SETTINGS_SKIN_VALUES = {
     "default",
@@ -8049,8 +8052,8 @@ def save_settings(settings: dict) -> dict:
             ):
                 continue
             # Validate list-valued order/visibility settings. Chat/settings stay
-            # fixed for sidebar tabs even if a tampered POST tries to persist
-            # them, and duplicates are collapsed while preserving first order.
+            # fixed for sidebar tabs, composer ordering only accepts known
+            # footer controls, and duplicates collapse while preserving order.
             if k in {"hidden_tabs", "tab_order", "composer_control_order"}:
                 if not isinstance(v, list):
                     continue
@@ -8060,7 +8063,12 @@ def save_settings(settings: dict) -> dict:
                     if not isinstance(s, str):
                         continue
                     s = s.strip()
-                    if not s or (k in {"hidden_tabs", "tab_order"} and s in {"chat", "settings"}) or s in seen:
+                    if (
+                        not s
+                        or (k in {"hidden_tabs", "tab_order"} and s in {"chat", "settings"})
+                        or (k == "composer_control_order" and s not in _COMPOSER_CONTROL_ORDER_KEYS)
+                        or s in seen
+                    ):
                         continue
                     seen.add(s)
                     cleaned.append(s)
