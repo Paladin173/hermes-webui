@@ -7800,11 +7800,10 @@ async function loadSettingsPanel(){
       maxTokensField.dataset.initialValue=maxTokensField.value;
       maxTokensField.addEventListener('input',_markSettingsDirty,{once:false});
     }
-    // Ambient provider quota chip toggle — default off; only shows at ≥1400px viewport
-    // when enabled (see style.css @media (max-width:1399.98px) rule).
+    // Ambient provider quota chip toggle — default on when provider quota data is available.
     const showQuotaChipCb=$('settingsShowQuotaChip');
     if(showQuotaChipCb){
-      showQuotaChipCb.checked=settings.show_quota_chip===true;
+      showQuotaChipCb.checked=settings.show_quota_chip!==false;
       window._showQuotaChip=showQuotaChipCb.checked;
       showQuotaChipCb.addEventListener('change',()=>{
         window._showQuotaChip=showQuotaChipCb.checked;
