@@ -7,6 +7,10 @@
 
 - **Three new opt-in appearance skins: GitHub, Codex, and Terracotta.** All are CSS-only, namespaced under `[data-skin]`, and selectable from Settings → Appearance — they change nothing unless you pick them. GitHub uses a restrained graphite + Primer-blue palette; Codex a minimal editor look with a muted sage accent; Terracotta a warm clay accent on a soft neutral background. Thanks @gottipx (GitHub #4634, Codex #4636, Terracotta #4635 — renamed from the originally-proposed name to a descriptive material name).
 
+### Changed
+
+- **The composer footer can now compact based on actual control overflow instead of fixed 700px/520px footer thresholds.** The footer measures the left control cluster and steps through full labels, icon chips, and hamburger consolidation only when the visible controls need it. The model chip now drops redundant provider prefixes, reasoning effort labels are shorter/title-cased, and the optional provider quota chip leads with the remaining value while keeping provider detail in the tooltip. Thanks @Paladin173. (#4657 follow-up)
+
 ### Fixed
 
 - **Settled assistant turns with interleaved text and tool calls now keep their original order, and no post-tool text is dropped.** When an assistant turn mixed prose with tool calls (text → tool → more text), the settled/reloaded transcript could lose the chronological ordering or silently drop post-tool text/thinking from a non-final assistant message. The Stable Assistant Turn Anchor now promotes a settled turn's mixed `content[]` into ordered scene rows (prose, tool, and thinking rows in sequence) instead of only recovering the raw fallback, and the backend hydration path mirrors the same scene model so a cold reload reconstructs an identical transcript. Only the turn-final assistant message's post-last-tool text is treated as the final answer; earlier assistant messages keep their post-tool content as activity rows. Tool-row de-duplication is conservative (it only merges rows it can positively confirm are the same call), biasing toward an extra visible card over ever silently losing one. Thanks @franksong2702. (#4958)
