@@ -151,11 +151,23 @@ def test_composer_control_order_frontend_contracts():
     assert "pointerdown" in PANELS_JS and "pointermove" in PANELS_JS and "pointerup" in PANELS_JS
     assert "document.elementFromPoint" in PANELS_JS
     assert "_composerControlPointerDrag" in PANELS_JS
+    assert "_COMPOSER_CONTROL_LONG_PRESS_MS" in PANELS_JS
+    assert "_COMPOSER_CONTROL_TOUCH_CANCEL_PX" in PANELS_JS
+    assert "longPressTimer=setTimeout" in PANELS_JS
+    assert "clearTimeout(drag.longPressTimer)" in PANELS_JS
+    assert "pointerType==='touch'" in PANELS_JS
+    assert "drag-armed" in PANELS_JS
+    assert "contextmenu" in PANELS_JS
+    assert "navigator.vibrate" in PANELS_JS
     assert "const sourceKey=e&&e.dataTransfer" in PANELS_JS
     assert "_renderComposerSituationalControlChips" not in PANELS_JS
     assert "draggable" in PANELS_JS
     assert "dragstart" in PANELS_JS and "drop" in PANELS_JS
     assert "_composerControlDragSuppressUntil" in PANELS_JS and "Date.now()+250" in PANELS_JS
+    assert "#composerControlsChips .tab-visibility-chip" in STYLE_CSS
+    assert "touch-action:none" in STYLE_CSS
+    assert "-webkit-touch-callout:none" in STYLE_CSS
+    assert ".tab-visibility-chip.drag-armed" in STYLE_CSS
     assert ".tab-visibility-chip.dragging" in STYLE_CSS
     assert ".tab-visibility-chip.drag-over" in STYLE_CSS
 
@@ -194,4 +206,4 @@ def test_new_i18n_keys_exist_across_all_locale_blocks():
         "hide_composer_toolsets",
         "hide_composer_status",
     ):
-        assert key in PANELS_JS
+        assert key in BOOT_JS

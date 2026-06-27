@@ -6563,6 +6563,9 @@ const _ALWAYS_VISIBLE_TABS = new Set(['chat','settings']);
 const _HIDDEN_TABS_LS_KEY = 'hermes-webui-hidden-tabs';
 const _TAB_ORDER_LS_KEY = 'hermes-webui-tab-order';
 const _COMPOSER_CONTROL_ORDER_LS_KEY = 'hermes-webui-composer-control-order';
+const _COMPOSER_CONTROL_LONG_PRESS_MS = 320;
+const _COMPOSER_CONTROL_TOUCH_CANCEL_PX = 10;
+const _COMPOSER_CONTROL_POINTER_DRAG_PX = 4;
 let _tabVisibilityDragSuppressUntil = 0;
 let _composerControlDragSuppressUntil = 0;
 let _composerControlPointerDrag = null;
@@ -6865,6 +6868,54 @@ function _clearComposerControlDragOver(){
   });
 }
 
+function _activateComposerControlPointerDrag(chip,drag){
+  if(!chip||!drag||drag.active) return;
+  if(drag.longPressTimer){
+    clearTimeout(drag.longPressTimer);
+    drag.longPressTimer=null;
+  }
+  drag.active=true;
+  chip.classList.remove('drag-armed');
+  chip.classList.add('dragging');
+  _composerControlDragSuppressUntil=Date.now()+350;
+  if(drag.pointerType==='touch'&&typeof navigator!=='undefined'&&typeof navigator.vibrate==='function'){
+    try{navigator.vibrate(10);}catch(_){}
+  }
+}
+
+function _clearComposerControlPointerDrag(chip,pointerId){
+  const drag=_composerControlPointerDrag;
+  const hasPointerId=pointerId!==undefined&&pointerId!==null;
+  if(drag&&(!hasPointerId||drag.pointerId===pointerId)){
+    if(drag.longPressTimer) clearTimeout(drag.longPressTimer);
+    _composerControlPointerDrag=null;
+  }
+  if(chip){
+    chip.classList.remove('drag-armed');
+    chip.classList.remove('dragging');
+    if(hasPointerId){
+      try{chip.releasePointerCapture(pointerId);}catch(_){}
+    }
+  }else{
+    document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-armed,#composerControlsChips .tab-visibility-chip.dragging').forEach(function(el){
+      el.classList.remove('drag-armed');
+      el.classList.remove('dragging');
+    });
+  }
+  _clearComposerControlDragOver();
+}
+
+function _updateComposerControlPointerDragTarget(drag,key,clientX,clientY){
+  if(!drag) return;
+  _clearComposerControlDragOver();
+  const target=document.elementFromPoint(clientX,clientY);
+  const targetChip=target&&target.closest?target.closest('#composerControlsChips .tab-visibility-chip[data-composer-control-key]'):null;
+  if(targetChip){
+    drag.targetKey=targetChip.getAttribute('data-composer-control-key')||key;
+    targetChip.classList.add('drag-over');
+  }
+}
+
 function _wireComposerControlChipDrag(chip,key){
   if(!chip)return;
   chip.setAttribute('data-composer-control-key',key);
@@ -6881,9 +6932,30 @@ function _wireComposerControlChipDrag(chip,key){
   chip.addEventListener('dragover',function(e){e.preventDefault();chip.classList.add('drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';});
   chip.addEventListener('dragleave',function(){chip.classList.remove('drag-over');});
   chip.addEventListener('drop',function(e){_handleComposerControlChipDrop(e,key);});
+  chip.addEventListener('contextmenu',function(e){
+    const drag=_composerControlPointerDrag;
+    if(drag&&drag.key===key&&drag.pointerType==='touch') e.preventDefault();
+  });
   chip.addEventListener('pointerdown',function(e){
-    if(e.button!==0) return;
-    _composerControlPointerDrag={key:key,startX:e.clientX,startY:e.clientY,active:false,targetKey:key,pointerId:e.pointerId};
+    if(e.button!==0&&e.pointerType!=='touch') return;
+    _clearComposerControlPointerDrag(null);
+    const drag={
+      key:key,
+      startX:e.clientX,
+      startY:e.clientY,
+      active:false,
+      cancelled:false,
+      targetKey:key,
+      pointerId:e.pointerId,
+      pointerType:e.pointerType||''
+    };
+    if(drag.pointerType==='touch'){
+      chip.classList.add('drag-armed');
+      drag.longPressTimer=setTimeout(function(){
+        if(_composerControlPointerDrag===drag) _activateComposerControlPointerDrag(chip,drag);
+      },_COMPOSER_CONTROL_LONG_PRESS_MS);
+    }
+    _composerControlPointerDrag=drag;
     try{chip.setPointerCapture(e.pointerId);}catch(_){}
   });
   chip.addEventListener('pointermove',function(e){
@@ -6891,38 +6963,41 @@ function _wireComposerControlChipDrag(chip,key){
     if(!drag||drag.pointerId!==e.pointerId||drag.key!==key) return;
     const dx=Math.abs(e.clientX-drag.startX);
     const dy=Math.abs(e.clientY-drag.startY);
-    if(!drag.active&&(dx>4||dy>4)){
-      drag.active=true;
-      chip.classList.add('dragging');
+    if(!drag.active&&drag.pointerType==='touch'){
+      if(dx>_COMPOSER_CONTROL_TOUCH_CANCEL_PX||dy>_COMPOSER_CONTROL_TOUCH_CANCEL_PX){
+        drag.cancelled=true;
+        if(drag.longPressTimer){
+          clearTimeout(drag.longPressTimer);
+          drag.longPressTimer=null;
+        }
+        chip.classList.remove('drag-armed');
+      }
+      return;
+    }
+    if(!drag.active&&(dx>_COMPOSER_CONTROL_POINTER_DRAG_PX||dy>_COMPOSER_CONTROL_POINTER_DRAG_PX)){
+      _activateComposerControlPointerDrag(chip,drag);
     }
     if(!drag.active) return;
     e.preventDefault();
-    _clearComposerControlDragOver();
-    const target=document.elementFromPoint(e.clientX,e.clientY);
-    const targetChip=target&&target.closest?target.closest('#composerControlsChips .tab-visibility-chip[data-composer-control-key]'):null;
-    if(targetChip){
-      drag.targetKey=targetChip.getAttribute('data-composer-control-key')||key;
-      targetChip.classList.add('drag-over');
-    }
+    _updateComposerControlPointerDragTarget(drag,key,e.clientX,e.clientY);
   });
   chip.addEventListener('pointerup',function(e){
     const drag=_composerControlPointerDrag;
     if(!drag||drag.pointerId!==e.pointerId||drag.key!==key) return;
-    _composerControlPointerDrag=null;
-    chip.classList.remove('dragging');
-    _clearComposerControlDragOver();
-    try{chip.releasePointerCapture(e.pointerId);}catch(_){}
+    _clearComposerControlPointerDrag(chip,e.pointerId);
     if(drag.active){
       e.preventDefault();
       e.stopPropagation();
       if(_moveComposerControlOrderKey(drag.key,drag.targetKey||key)) _composerControlDragSuppressUntil=Date.now()+350;
       else _composerControlDragSuppressUntil=Date.now()+250;
+    }else if(drag.cancelled){
+      e.preventDefault();
+      e.stopPropagation();
+      _composerControlDragSuppressUntil=Date.now()+250;
     }
   });
   chip.addEventListener('pointercancel',function(e){
-    if(_composerControlPointerDrag&&_composerControlPointerDrag.pointerId===e.pointerId) _composerControlPointerDrag=null;
-    chip.classList.remove('dragging');
-    _clearComposerControlDragOver();
+    _clearComposerControlPointerDrag(chip,e.pointerId);
   });
 }
 
