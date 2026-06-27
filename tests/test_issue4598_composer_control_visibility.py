@@ -15,6 +15,7 @@ PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 
 # The 15 composer-control visibility flags this feature ships.
 HIDE_KEYS = [
@@ -83,6 +84,72 @@ def test_footer_control_chips_rendered_in_panels():
     assert "_applyComposerFooterVisibilitySettings" in PANELS_JS
 
 
+def test_composer_control_order_is_persisted_and_draggable(monkeypatch, tmp_path):
+    """Composer footer controls can be drag-sorted from Settings and the order
+    round-trips through settings.json."""
+    import api.config as config
+
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(config, "SETTINGS_FILE", settings_path)
+
+    loaded = config.load_settings()
+    assert loaded["composer_control_order"] == []
+
+    saved = config.save_settings({
+        "composer_control_order": [
+            "hide_composer_model",
+            "hide_composer_quota_chip",
+            "hide_composer_model",
+            "",
+            42,
+            "hide_composer_workspace",
+        ]
+    })
+    assert saved["composer_control_order"] == [
+        "hide_composer_model",
+        "hide_composer_quota_chip",
+        "hide_composer_workspace",
+    ]
+    assert config.load_settings()["composer_control_order"] == saved["composer_control_order"]
+
+    assert "composer_control_order" in config._SETTINGS_ALLOWED_KEYS
+    assert "composer_control_order" not in config._SETTINGS_BOOL_KEYS
+
+
+def test_composer_control_order_frontend_contracts():
+    """Frontend must expose composer order helpers, drag chips, and include the
+    order in Appearance autosave."""
+    for fn in (
+        "_sanitizeComposerControlOrder",
+        "_orderedComposerControlDefs",
+        "_applyComposerControlOrder",
+    ):
+        assert f"function {fn}(" in BOOT_JS, f"boot.js must define {fn}()"
+    for fn in (
+        "_getComposerControlOrder",
+        "_setComposerControlOrder",
+        "_wireComposerControlChipDrag",
+        "_moveComposerControlOrderKey",
+        "_handleComposerControlChipDrop",
+    ):
+        assert f"function {fn}(" in PANELS_JS, f"panels.js must define {fn}()"
+
+    assert "orderSelector" in BOOT_JS
+    assert "insertBefore" in BOOT_JS
+    assert "window._composerControlOrder=_sanitizeComposerControlOrder(s.composer_control_order)" in BOOT_JS
+    assert "composer_control_order: _getComposerControlOrder()" in PANELS_JS
+    assert "composer_control_order" in CONFIG_PY
+
+    render_body = PANELS_JS[PANELS_JS.index("function _renderComposerControlChips("):PANELS_JS.index("function _renderComposerSituationalControlChips(")]
+    assert "_orderedComposerControlDefsForSettings" in render_body
+    assert "_wireComposerControlChipDrag" in render_body
+    assert "draggable" in PANELS_JS
+    assert "dragstart" in PANELS_JS and "drop" in PANELS_JS
+    assert "_composerControlDragSuppressUntil" in PANELS_JS and "Date.now()+250" in PANELS_JS
+    assert ".tab-visibility-chip.dragging" in STYLE_CSS
+    assert ".tab-visibility-chip.drag-over" in STYLE_CSS
+
+
 def test_new_i18n_keys_exist_across_all_locale_blocks():
     """Every new i18n key must appear in all 13 locale blocks (strict locale
     parity), not just `en` — otherwise the locale-coverage suite goes red."""
@@ -93,3 +160,6 @@ def test_new_i18n_keys_exist_across_all_locale_blocks():
             f"{key} appears {count}x in i18n.js — expected >=13 (one per locale "
             f"block) for strict locale parity"
         )
+
+    assert "Drag chips to reorder the footer." in INDEX_HTML
+    assert "Reordering is not supported." not in I18N_JS
