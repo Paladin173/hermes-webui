@@ -3901,6 +3901,18 @@ function closeMobileComposerConfig(){
   if(typeof closeWsDropdown==='function') closeWsDropdown();
 }
 
+function openMobileComposerConfig(){
+  const panel=$('composerMobileConfigPanel');
+  if(!panel) return;
+  if(typeof closeProfileDropdown==='function') closeProfileDropdown();
+  if(typeof closeWsDropdown==='function') closeWsDropdown();
+  closeModelDropdown();
+  closeReasoningDropdown();
+  if(typeof closeToolsetsDropdown==='function') closeToolsetsDropdown();
+  panel.classList.add('open');
+  _syncMobileComposerConfigButton(true);
+}
+
 function toggleMobileComposerConfig(){
   const panel=$('composerMobileConfigPanel');
   if(!panel) return;
@@ -3912,14 +3924,22 @@ function toggleMobileComposerConfig(){
     if(typeof closeToolsetsDropdown==='function') closeToolsetsDropdown();
     return;
   }
-  if(typeof closeProfileDropdown==='function') closeProfileDropdown();
-  if(typeof closeWsDropdown==='function') closeWsDropdown();
-  closeModelDropdown();
-  closeReasoningDropdown();
-  if(typeof closeToolsetsDropdown==='function') closeToolsetsDropdown();
-  panel.classList.add('open');
-  _syncMobileComposerConfigButton(true);
+  openMobileComposerConfig();
 }
+
+function openComposerContextMenu(e){
+  if(e){
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const tooltip=$('ctxTooltip');
+  if(tooltip){
+    tooltip.classList.remove('ctx-tooltip-active');
+    tooltip.setAttribute('aria-hidden','true');
+  }
+  openMobileComposerConfig();
+}
+window.openComposerContextMenu=openComposerContextMenu;
 
 document.addEventListener('click',function(e){
   if(
@@ -4810,20 +4830,16 @@ function _syncCtxIndicator(usage){
 }
 
 // ── Touch support: toggle context tooltip on tap (#524) ──
-// On mobile, hover doesn't work — allow tap on the context ring button
-// to toggle the tooltip visibility so the compress affordance is reachable.
+// Hover/focus still exposes the compact tooltip, but a click/tap now opens the
+// shared composer config menu used by the phone footer so the richer context
+// details and compress action have one interaction path.
 document.addEventListener('DOMContentLoaded',function(){
   const wrap=document.getElementById('ctxIndicatorWrap');
   const tooltip=document.getElementById('ctxTooltip');
   if(!wrap||!tooltip)return;
   const btn=document.getElementById('ctxIndicator');
   if(!btn)return;
-  btn.addEventListener('click',function(e){
-    e.stopPropagation();
-    const isOpen=tooltip.classList.contains('ctx-tooltip-active');
-    tooltip.classList.toggle('ctx-tooltip-active',!isOpen);
-    tooltip.setAttribute('aria-hidden',String(isOpen));
-  });
+  btn.addEventListener('click',openComposerContextMenu);
   // Close on outside tap
   document.addEventListener('click',function(){
     tooltip.classList.remove('ctx-tooltip-active');
