@@ -9,7 +9,7 @@
 
 ### Changed
 
-- **The composer footer can now compact based on actual control overflow instead of fixed 700px/520px footer thresholds.** The footer measures the left control cluster and steps through full labels, icon chips, and hamburger consolidation only when the visible controls need it. The model chip now drops redundant provider prefixes, reasoning effort labels are shorter/title-cased, and the provider quota chip now shows by default when quota data is available, leading with the remaining value while keeping provider detail in the tooltip. Thanks @Paladin173. (#4657 follow-up)
+- **The composer footer can now compact based on actual control overflow instead of fixed 700px/520px footer thresholds.** The footer measures the left control cluster and steps through full labels, icon chips, and hamburger consolidation only when the visible controls need it. The model chip now drops redundant provider prefixes, reasoning effort labels are shorter/title-cased, and the provider quota chip now shows by default when quota data is available, leading with the remaining value while keeping provider detail in the tooltip and folding into the shared compact menu when space runs out. Thanks @Paladin173. (#4657 follow-up)
 
 - **Settings → Appearance composer-control chips now support touch long-press reordering.** On phones and Android WebView, tapping a chip still toggles it, while pressing and holding arms drag sorting so the footer controls can be reordered without relying on desktop HTML5 drag events. Thanks @Paladin173. (#4657 follow-up)
 

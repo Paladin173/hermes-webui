@@ -136,6 +136,7 @@ def test_composer_control_order_frontend_contracts():
 
     assert "orderSelector" in BOOT_JS
     assert "insertBefore" in BOOT_JS
+    assert "selectors:['#providerQuotaChip','#composerMobileQuotaAction']" in BOOT_JS
     assert "window._composerControlOrder=_sanitizeComposerControlOrder(s.composer_control_order)" in BOOT_JS
     assert "composer_control_order: _getComposerControlOrder()" in PANELS_JS
     assert "composer_control_order" in CONFIG_PY

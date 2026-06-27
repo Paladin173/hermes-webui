@@ -387,6 +387,7 @@ def test_composer_controls_switch_to_fit_stage_classes():
         ".composer-footer.cf-burger .composer-workspace-files-btn",
         ".composer-footer.cf-burger .composer-workspace-chip",
         ".composer-footer.cf-burger .composer-left > .composer-model-wrap",
+        ".composer-footer.cf-burger .provider-quota-chip",
         ".composer-footer.cf-burger .composer-left > .composer-reasoning-wrap",
         ".composer-footer.cf-burger .composer-left > .composer-toolsets-wrap",
         ".composer-footer.cf-burger .composer-mobile-config-btn",
@@ -397,6 +398,8 @@ def test_composer_controls_switch_to_fit_stage_classes():
         assert selector in CSS, f"{selector} should be present in the .cf-burger rules"
     assert ".composer-footer.cf-burger .composer-workspace-chip{display:none!important".replace(" ", "") in CSS.replace(" ", ""), \
         ".cf-burger must remove the blank workspace switch slot"
+    assert ".composer-footer.cf-burger .provider-quota-chip" in CSS and ".composer-footer.cf-burger .composer-left > .composer-toolsets-wrap{display:none!important" in CSS, \
+        ".cf-burger must fold the inline quota chip into the shared config menu"
     assert ".composer-footer.cf-burger .composer-mobile-config-btn{box-sizing:border-box;position:relative;display:inline-flex!important" in CSS, \
         ".cf-burger must expose the config button even on wider viewports"
 
@@ -1222,6 +1225,8 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
     panel_html = HTML[panel_start:panel_end]
     assert 'id="composerMobileModelAction"' in panel_html, \
         "mobile model action must be inside the overflow panel"
+    assert 'id="composerMobileQuotaAction"' in panel_html, \
+        "mobile quota action must be inside the overflow panel"
     assert 'id="composerMobileReasoningAction"' in panel_html, \
         "mobile reasoning action must be inside the overflow panel"
     assert 'onclick="toggleModelDropdown()"' in panel_html, \
@@ -1230,11 +1235,15 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "mobile reasoning action must reuse the existing reasoning dropdown"
     assert 'id="composerMobileModelLabel"' in panel_html, \
         "mobile model action must expose the selected model label"
+    assert 'id="composerMobileQuotaLabel"' in panel_html, \
+        "mobile quota action must expose the selected quota label"
     assert 'id="composerMobileReasoningLabel"' in panel_html, \
         "mobile reasoning action must expose the selected reasoning label"
     ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
     assert "composerMobileModelAction" in ui_js, \
         "model dropdown positioning/click handling must know the mobile model action"
+    assert "composerMobileQuotaAction" in ui_js, \
+        "quota sync must know the mobile quota action"
     assert "composerMobileReasoningAction" in ui_js, \
         "reasoning dropdown positioning/click handling must know the mobile reasoning action"
 
@@ -1245,6 +1254,20 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "phone width must hide the footer reasoning chip behind overflow"
     assert ".composer-mobile-config-action" in mobile_css, \
         "mobile overflow panel must size the model/reasoning actions"
+
+
+def test_mobile_overflow_panel_quota_order_matches_desktop_sequence():
+    """The mobile overflow panel should keep the same shared control order as desktop."""
+    panel_start = HTML.index('id="composerMobileConfigPanel"')
+    panel_end = HTML.index('<div class="profile-dropdown"', panel_start)
+    panel_html = HTML[panel_start:panel_end]
+    workspace_idx = panel_html.index('id="composerMobileWorkspaceAction"')
+    model_idx = panel_html.index('id="composerMobileModelAction"')
+    quota_idx = panel_html.index('id="composerMobileQuotaAction"')
+    reasoning_idx = panel_html.index('id="composerMobileReasoningAction"')
+    context_idx = panel_html.index('id="composerMobileContextAction"')
+    assert workspace_idx < model_idx < quota_idx < reasoning_idx < context_idx, \
+        "mobile control order should mirror the desktop/shared control sequence"
 
 
 def test_model_and_reasoning_dropdowns_use_mobile_panel_anchors():
@@ -1446,6 +1469,7 @@ def test_mobile_config_kickers_have_i18n_fallbacks():
     for key, label in (
         ("composer_mobile_workspace", "Workspace"),
         ("composer_mobile_model", "Model"),
+        ("composer_mobile_quota", "Quota"),
         ("composer_mobile_reasoning", "Reasoning"),
         ("composer_mobile_context", "Context"),
     ):

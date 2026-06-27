@@ -50,6 +50,8 @@ def test_quota_chip_render_short_circuits_when_disabled():
     assert guard_idx < text_call_idx, (
         "Disabled-chip guard must run before the indicator-text computation"
     )
+    assert "composerMobileQuotaAction" in render_body
+    assert "composerMobileQuotaLabel" in render_body
 
     # Refresher must short-circuit fetch when disabled
     refresh_start = js.index("async function refreshProviderQuotaIndicator(){")
@@ -59,6 +61,8 @@ def test_quota_chip_render_short_circuits_when_disabled():
     assert "window._showQuotaChip!==true" in refresh_head, (
         "refreshProviderQuotaIndicator must skip the fetch when chip is disabled"
     )
+    assert "composerMobileQuotaAction" in refresh_head
+    assert "composerMobileQuotaLabel" in refresh_head
 
 
 def test_quota_chip_boot_initializes_default_on():
