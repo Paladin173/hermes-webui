@@ -2103,7 +2103,7 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
     // and workspace actions (New file/folder) work before the first session (#804).
     if(s.default_workspace) S._profileDefaultWorkspace=s.default_workspace;
     window._showTokenUsage=!!s.show_token_usage;
-    window._showQuotaChip=s.show_quota_chip===true;
+    window._showQuotaChip=s.show_quota_chip!==false;
     window._showConversationOutline=s.show_conversation_outline===true;
     document.documentElement.dataset.conversationOutline=window._showConversationOutline?'enabled':'disabled';
     if(typeof applyConversationOutlinePreference==='function') applyConversationOutlinePreference();
@@ -2228,7 +2228,7 @@ window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
   }catch(e){
     window._sendKey='enter';
     window._showTokenUsage=false;
-    window._showQuotaChip=false;
+    window._showQuotaChip=true;
     window._showConversationOutline=false;
     document.documentElement.dataset.conversationOutline='disabled';
     if(typeof applyConversationOutlinePreference==='function') applyConversationOutlinePreference();
