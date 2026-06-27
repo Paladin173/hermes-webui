@@ -141,8 +141,15 @@ def test_composer_control_order_frontend_contracts():
     assert "composer_control_order" in CONFIG_PY
 
     render_body = PANELS_JS[PANELS_JS.index("function _renderComposerControlChips("):PANELS_JS.index("function _renderComposerSituationalControlChips(")]
+    situational_body = PANELS_JS[PANELS_JS.index("function _renderComposerSituationalControlChips("):PANELS_JS.index("function _applySavedSettingsUi(")]
     assert "_orderedComposerControlDefsForSettings" in render_body
+    assert "baseDefs.concat(situationalDefs)" in render_body
     assert "_wireComposerControlChipDrag" in render_body
+    assert "data-composer-control-key" in PANELS_JS
+    assert "application/x-hermes-composer-control" in PANELS_JS
+    assert "const sourceKey=e&&e.dataTransfer" in PANELS_JS
+    assert "container.innerHTML='';" in situational_body
+    assert "_wireComposerControlChipDrag" not in situational_body
     assert "draggable" in PANELS_JS
     assert "dragstart" in PANELS_JS and "drop" in PANELS_JS
     assert "_composerControlDragSuppressUntil" in PANELS_JS and "Date.now()+250" in PANELS_JS
@@ -162,4 +169,7 @@ def test_new_i18n_keys_exist_across_all_locale_blocks():
         )
 
     assert "Drag chips to reorder the footer." in INDEX_HTML
+    assert "Some controls only appear for certain viewport, mode, or runtime states." in INDEX_HTML
     assert "Reordering is not supported." not in I18N_JS
+    assert "La réorganisation n\\'est pas prise en charge" not in I18N_JS
+    assert "Không hỗ trợ đổi thứ tự" not in I18N_JS

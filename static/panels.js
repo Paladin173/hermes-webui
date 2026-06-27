@@ -6847,17 +6847,23 @@ function _orderedComposerControlDefsForSettings(defs){
   const ordered=typeof window._orderedComposerControlDefs==='function'
     ? window._orderedComposerControlDefs(_getComposerControlOrder())
     : (Array.isArray(defs)?defs:[]);
-  const keys=new Set((Array.isArray(defs)?defs:[]).map(def=>def.key));
+  const allDefs=Array.isArray(defs)&&defs.length
+    ? defs
+    : (Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[])
+      .concat(Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[]);
+  const keys=new Set(allDefs.map(def=>def.key));
   return ordered.filter(def=>keys.has(def.key));
 }
 
 function _wireComposerControlChipDrag(chip,key){
   if(!chip)return;
+  chip.setAttribute('data-composer-control-key',key);
   chip.setAttribute('draggable','true');
   chip.addEventListener('dragstart',function(e){
     chip.classList.add('dragging');
     if(e.dataTransfer){
       e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('application/x-hermes-composer-control',key);
       e.dataTransfer.setData('text/plain',key);
     }
   });
@@ -6887,15 +6893,19 @@ function _moveComposerControlOrderKey(sourceKey,targetKey){
 
 function _handleComposerControlChipDrop(e,targetKey){
   if(e){e.preventDefault();e.stopPropagation();}
-  document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-over,#composerSituationalControlsChips .tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
-  const sourceKey=e&&e.dataTransfer?e.dataTransfer.getData('text/plain'):'';
+  document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
+  const sourceKey=e&&e.dataTransfer
+    ? (e.dataTransfer.getData('application/x-hermes-composer-control')||e.dataTransfer.getData('text/plain'))
+    : '';
   if(_moveComposerControlOrderKey(sourceKey,targetKey)) _composerControlDragSuppressUntil=Date.now()+250;
 }
 
 function _renderComposerControlChips(){
   const container=$('composerControlsChips');
   if(!container) return;
-  const defs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
+  const baseDefs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
+  const situationalDefs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
+  const defs=baseDefs.concat(situationalDefs);
   const state=window._composerControlVisibility||{};
   container.innerHTML='';
   _orderedComposerControlDefsForSettings(defs).forEach(function(def){
@@ -6916,22 +6926,7 @@ function _renderComposerControlChips(){
 function _renderComposerSituationalControlChips(){
   const container=$('composerSituationalControlsChips');
   if(!container) return;
-  const defs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
-  const state=window._composerControlVisibility||{};
   container.innerHTML='';
-  _orderedComposerControlDefsForSettings(defs).forEach(function(def){
-    const chip=document.createElement('button');
-    chip.type='button';
-    chip.className='tab-visibility-chip';
-    const hidden=!!state[def.key];
-    if(hidden) chip.classList.add('chip-off');
-    chip.textContent=_composerControlChipLabel(def);
-    chip.setAttribute('role','switch');
-    chip.setAttribute('aria-checked',hidden?'false':'true');
-    chip.onclick=function(){if(Date.now()<_composerControlDragSuppressUntil)return;_toggleComposerControlChip(def.key);};
-    _wireComposerControlChipDrag(chip,def.key);
-    container.appendChild(chip);
-  });
 }
 
 function switchSettingsSection(name,opts){
