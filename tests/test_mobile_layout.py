@@ -570,6 +570,17 @@ def test_mobile_sidebar_opens_as_full_screen_surface_with_panel_rail():
     )
 
 
+def test_compact_titlebar_keeps_hamburger_available():
+    """Compact app chrome must keep the titlebar menu reachable."""
+    compact_css = "\n".join(_max_width_media_blocks(900))
+    assert re.search(r'\.app-titlebar-hamburger,\s*\.app-titlebar-spacer\{[^}]*display:\s*flex', compact_css), (
+        "Compact titlebar should expose the hamburger before true phone width"
+    )
+    assert ".rightpanel{display:none}" in compact_css.replace(" ", ""), (
+        "The compact titlebar breakpoint should match the hidden workspace-panel breakpoint"
+    )
+
+
 def test_mobile_rail_click_opens_full_screen_panel_drawer():
     """Rail clicks on phone should keep the full-screen drawer open for panel switching."""
     panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
@@ -1314,6 +1325,32 @@ def test_context_details_live_in_mobile_overflow_panel():
     context_button = _declarations(_rule_body(CSS, ".composer-mobile-context-compress"))
     assert context_button.get("width") == "auto", \
         "mobile compress affordance should be compact inside the context row"
+
+
+def test_context_indicator_click_opens_shared_mobile_config_menu():
+    """The desktop context ring should open the same menu used by phone mode."""
+    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    assert "function openMobileComposerConfig()" in ui_js, \
+        "mobile config open path should be reusable outside the phone button"
+    assert "function openComposerContextMenu(e)" in ui_js, \
+        "context indicator needs a named click path into the shared config menu"
+
+    context_menu_body = _js_function_body(ui_js, "openComposerContextMenu")
+    for expected in (
+        "e.preventDefault()",
+        "e.stopPropagation()",
+        "ctxTooltip",
+        "openMobileComposerConfig()",
+    ):
+        assert expected in context_menu_body, \
+            f"context click should open the shared menu without leaving tooltip state behind ({expected})"
+
+    assert "btn.addEventListener('click',openComposerContextMenu)" in ui_js, \
+        "context indicator click must open the shared composer config menu"
+
+    panel_open = _declarations(_rule_body(CSS, ".composer-mobile-config-panel.open"))
+    assert panel_open.get("display") == "flex", \
+        "the shared composer config panel must be displayable when opened outside phone CSS"
 
 
 def test_workspace_control_lives_in_mobile_overflow_panel():
