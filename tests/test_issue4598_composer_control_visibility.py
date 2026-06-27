@@ -142,11 +142,16 @@ def test_composer_control_order_frontend_contracts():
 
     render_body = PANELS_JS[PANELS_JS.index("function _renderComposerControlChips("):PANELS_JS.index("function _renderComposerSituationalControlChips(")]
     situational_body = PANELS_JS[PANELS_JS.index("function _renderComposerSituationalControlChips("):PANELS_JS.index("function _applySavedSettingsUi(")]
+    assert "_COMPOSER_CONTROL_FALLBACK_DEFS" in PANELS_JS
+    assert "_composerControlDefsForSettings" in PANELS_JS
     assert "_orderedComposerControlDefsForSettings" in render_body
-    assert "baseDefs.concat(situationalDefs)" in render_body
+    assert "_composerControlDefsForSettings()" in render_body
     assert "_wireComposerControlChipDrag" in render_body
     assert "data-composer-control-key" in PANELS_JS
     assert "application/x-hermes-composer-control" in PANELS_JS
+    assert "pointerdown" in PANELS_JS and "pointermove" in PANELS_JS and "pointerup" in PANELS_JS
+    assert "document.elementFromPoint" in PANELS_JS
+    assert "_composerControlPointerDrag" in PANELS_JS
     assert "const sourceKey=e&&e.dataTransfer" in PANELS_JS
     assert "container.innerHTML='';" in situational_body
     assert "_wireComposerControlChipDrag" not in situational_body
@@ -173,3 +178,22 @@ def test_new_i18n_keys_exist_across_all_locale_blocks():
     assert "Reordering is not supported." not in I18N_JS
     assert "La réorganisation n\\'est pas prise en charge" not in I18N_JS
     assert "Không hỗ trợ đổi thứ tự" not in I18N_JS
+
+    for key in (
+        "hide_composer_attach",
+        "hide_composer_saved_prompts",
+        "hide_composer_mic",
+        "hide_composer_profile",
+        "hide_composer_workspace",
+        "hide_composer_model",
+        "hide_composer_reasoning",
+        "hide_composer_context",
+        "hide_composer_voice_mode",
+        "hide_composer_yolo",
+        "hide_composer_bg_badge",
+        "hide_composer_mobile_config",
+        "hide_composer_quota_chip",
+        "hide_composer_toolsets",
+        "hide_composer_status",
+    ):
+        assert key in PANELS_JS

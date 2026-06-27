@@ -6566,6 +6566,25 @@ const _TAB_ORDER_LS_KEY = 'hermes-webui-tab-order';
 const _COMPOSER_CONTROL_ORDER_LS_KEY = 'hermes-webui-composer-control-order';
 let _tabVisibilityDragSuppressUntil = 0;
 let _composerControlDragSuppressUntil = 0;
+let _composerControlPointerDrag = null;
+
+const _COMPOSER_CONTROL_FALLBACK_DEFS = [
+  {key:'hide_composer_attach',label:'Attach',labelKey:'composer_control_attach'},
+  {key:'hide_composer_saved_prompts',label:'Saved prompts',labelKey:'composer_control_saved_prompts'},
+  {key:'hide_composer_mic',label:'Mic',labelKey:'composer_control_mic'},
+  {key:'hide_composer_profile',label:'Profile',labelKey:'composer_control_profile'},
+  {key:'hide_composer_workspace',label:'Workspace',labelKey:'composer_control_workspace'},
+  {key:'hide_composer_model',label:'Model',labelKey:'composer_control_model'},
+  {key:'hide_composer_reasoning',label:'Reasoning',labelKey:'composer_control_reasoning'},
+  {key:'hide_composer_context',label:'Context',labelKey:'composer_control_context'},
+  {key:'hide_composer_voice_mode',label:'Voice mode',labelKey:'composer_control_voice_mode'},
+  {key:'hide_composer_yolo',label:'YOLO',labelKey:'composer_control_yolo'},
+  {key:'hide_composer_bg_badge',label:'Background badge',labelKey:'composer_control_bg_badge'},
+  {key:'hide_composer_mobile_config',label:'Mobile config',labelKey:'composer_control_mobile_config'},
+  {key:'hide_composer_quota_chip',label:'Quota chip',labelKey:'composer_control_quota_chip'},
+  {key:'hide_composer_toolsets',label:'Toolsets',labelKey:'composer_control_toolsets'},
+  {key:'hide_composer_status',label:'Status',labelKey:'composer_control_status'},
+];
 
 function _sanitizeTabPanelList(panels){
   if(!Array.isArray(panels)) return [];
@@ -6799,9 +6818,7 @@ function _ensureComposerControlVisibilityState(settings){
 
 function _composerControlVisibilityPayload(){
   const payload={};
-  const baseDefs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
-  const situationalDefs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
-  const defs=baseDefs.concat(situationalDefs);
+  const defs=_composerControlDefsForSettings();
   const state=window._composerControlVisibility||{};
   defs.forEach(function(def){payload[def.key]=!!state[def.key];});
   return payload;
@@ -6825,6 +6842,13 @@ function _composerControlChipLabel(def){
   return def.label||'';
 }
 
+function _composerControlDefsForSettings(){
+  const baseDefs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
+  const situationalDefs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
+  const defs=baseDefs.concat(situationalDefs);
+  return defs.length ? defs : _COMPOSER_CONTROL_FALLBACK_DEFS.slice();
+}
+
 function _getComposerControlOrder(){
   try{
     const raw=localStorage.getItem(_COMPOSER_CONTROL_ORDER_LS_KEY);
@@ -6844,15 +6868,16 @@ function _setComposerControlOrder(order){
 }
 
 function _orderedComposerControlDefsForSettings(defs){
+  const sourceDefs=Array.isArray(defs)&&defs.length?defs:_composerControlDefsForSettings();
   const ordered=typeof window._orderedComposerControlDefs==='function'
     ? window._orderedComposerControlDefs(_getComposerControlOrder())
-    : (Array.isArray(defs)?defs:[]);
-  const allDefs=Array.isArray(defs)&&defs.length
-    ? defs
-    : (Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[])
-      .concat(Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[]);
-  const keys=new Set(allDefs.map(def=>def.key));
-  return ordered.filter(def=>keys.has(def.key));
+    : sourceDefs;
+  const keys=new Set(sourceDefs.map(def=>def.key));
+  const out=ordered.filter(def=>def&&keys.has(def.key));
+  sourceDefs.forEach(function(def){
+    if(def&&!out.some(existing=>existing&&existing.key===def.key)) out.push(def);
+  });
+  return out;
 }
 
 function _wireComposerControlChipDrag(chip,key){
@@ -6871,6 +6896,49 @@ function _wireComposerControlChipDrag(chip,key){
   chip.addEventListener('dragover',function(e){e.preventDefault();chip.classList.add('drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';});
   chip.addEventListener('dragleave',function(){chip.classList.remove('drag-over');});
   chip.addEventListener('drop',function(e){_handleComposerControlChipDrop(e,key);});
+  chip.addEventListener('pointerdown',function(e){
+    if(e.button!==0) return;
+    _composerControlPointerDrag={key:key,startX:e.clientX,startY:e.clientY,active:false,targetKey:key,pointerId:e.pointerId};
+    try{chip.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  chip.addEventListener('pointermove',function(e){
+    const drag=_composerControlPointerDrag;
+    if(!drag||drag.pointerId!==e.pointerId||drag.key!==key) return;
+    const dx=Math.abs(e.clientX-drag.startX);
+    const dy=Math.abs(e.clientY-drag.startY);
+    if(!drag.active&&(dx>4||dy>4)){
+      drag.active=true;
+      chip.classList.add('dragging');
+    }
+    if(!drag.active) return;
+    e.preventDefault();
+    document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
+    const target=document.elementFromPoint(e.clientX,e.clientY);
+    const targetChip=target&&target.closest?target.closest('#composerControlsChips .tab-visibility-chip[data-composer-control-key]'):null;
+    if(targetChip){
+      drag.targetKey=targetChip.getAttribute('data-composer-control-key')||key;
+      targetChip.classList.add('drag-over');
+    }
+  });
+  chip.addEventListener('pointerup',function(e){
+    const drag=_composerControlPointerDrag;
+    if(!drag||drag.pointerId!==e.pointerId||drag.key!==key) return;
+    _composerControlPointerDrag=null;
+    chip.classList.remove('dragging');
+    document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
+    try{chip.releasePointerCapture(e.pointerId);}catch(_){}
+    if(drag.active){
+      e.preventDefault();
+      e.stopPropagation();
+      if(_moveComposerControlOrderKey(drag.key,drag.targetKey||key)) _composerControlDragSuppressUntil=Date.now()+350;
+      else _composerControlDragSuppressUntil=Date.now()+250;
+    }
+  });
+  chip.addEventListener('pointercancel',function(e){
+    if(_composerControlPointerDrag&&_composerControlPointerDrag.pointerId===e.pointerId) _composerControlPointerDrag=null;
+    chip.classList.remove('dragging');
+    document.querySelectorAll('#composerControlsChips .tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
+  });
 }
 
 function _moveComposerControlOrderKey(sourceKey,targetKey){
@@ -6903,9 +6971,7 @@ function _handleComposerControlChipDrop(e,targetKey){
 function _renderComposerControlChips(){
   const container=$('composerControlsChips');
   if(!container) return;
-  const baseDefs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
-  const situationalDefs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
-  const defs=baseDefs.concat(situationalDefs);
+  const defs=_composerControlDefsForSettings();
   const state=window._composerControlVisibility||{};
   container.innerHTML='';
   _orderedComposerControlDefsForSettings(defs).forEach(function(def){
