@@ -26,6 +26,8 @@ def test_quota_chip_default_on_in_config_defaults():
     assert '"show_quota_chip": True' in src, "show_quota_chip must default to True"
     # Must be in the writable settings allow-list (bool keys)
     assert '"show_quota_chip",' in src, "show_quota_chip must be in _SETTINGS_BOOL_KEYS"
+    assert '"show_quota_chip_opt_out": False' in src, "opt-out marker must default to False"
+    assert '"show_quota_chip_opt_out",' in src, "opt-out marker must be in _SETTINGS_BOOL_KEYS"
 
 
 def test_quota_chip_render_short_circuits_when_disabled():
@@ -76,8 +78,10 @@ def test_quota_chip_panels_round_trip():
     # Payload read
     assert "const showQuotaChipCb=$('settingsShowQuotaChip');" in js
     assert "payload.show_quota_chip=showQuotaChipCb.checked;" in js
+    assert "payload.show_quota_chip_opt_out=!showQuotaChipCb.checked;" in js
     # Body assignment
     assert "body.show_quota_chip=showQuotaChip===true;" in js
+    assert "body.show_quota_chip_opt_out=showQuotaChip!==true;" in js
     # Settings panel load — checkbox is initialized from saved settings
     assert "showQuotaChipCb.checked=settings.show_quota_chip!==false;" in js
     # Window-state propagation
@@ -90,3 +94,35 @@ def test_quota_chip_localized_in_all_locales():
     js = I18N.read_text(encoding="utf-8")
     assert js.count("settings_label_quota_chip:") == 14, "12 locales expected"
     assert js.count("settings_desc_quota_chip:") == 14, "12 locales expected"
+
+
+def test_quota_chip_migrates_old_persisted_false_without_opt_out(tmp_path, monkeypatch):
+    import json
+    import api.config as config
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(
+        json.dumps({"onboarding_completed": True, "show_quota_chip": False}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "SETTINGS_FILE", settings_file)
+
+    assert config.load_settings()["show_quota_chip"] is True
+
+
+def test_quota_chip_honors_explicit_post_flip_opt_out(tmp_path, monkeypatch):
+    import json
+    import api.config as config
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(
+        json.dumps({
+            "onboarding_completed": True,
+            "show_quota_chip": False,
+            "show_quota_chip_opt_out": True,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "SETTINGS_FILE", settings_file)
+
+    assert config.load_settings()["show_quota_chip"] is False

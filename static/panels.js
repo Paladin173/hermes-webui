@@ -7365,7 +7365,10 @@ function _preferencesPayloadFromUi(){
   const showUsageCb=$('settingsShowTokenUsage');
   if(showUsageCb) payload.show_token_usage=showUsageCb.checked;
   const showQuotaChipCb=$('settingsShowQuotaChip');
-  if(showQuotaChipCb) payload.show_quota_chip=showQuotaChipCb.checked;
+  if(showQuotaChipCb){
+    payload.show_quota_chip=showQuotaChipCb.checked;
+    payload.show_quota_chip_opt_out=!showQuotaChipCb.checked;
+  }
   const showConversationOutlineCb=$('settingsShowConversationOutline');
   if(showConversationOutlineCb) payload.show_conversation_outline=showConversationOutlineCb.checked;
   const hideSuggestionsCb=$('settingsHideSuggestions');
@@ -10274,6 +10277,7 @@ async function saveSettings(andClose){
     }
   }
   body.show_quota_chip=showQuotaChip===true;
+  body.show_quota_chip_opt_out=showQuotaChip!==true;
   body.show_conversation_outline=showConversationOutline===true;
   body.show_tps=showTps;
   body.fade_text_effect=fadeTextEffect;
