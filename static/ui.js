@@ -1643,6 +1643,8 @@ function _providerQuotaIndicatorText(status){
 function renderProviderQuotaIndicator(status){
   const chip=$('providerQuotaChip');
   const label=$('providerQuotaChipLabel');
+  const mobileAction=$('composerMobileQuotaAction');
+  const mobileLabel=$('composerMobileQuotaLabel');
   if(!chip||!label) return;
   // Hide entirely when the user has disabled the ambient quota chip in Settings.
   // Boot defaults this on; an explicit false preference suppresses it.
@@ -1650,6 +1652,8 @@ function renderProviderQuotaIndicator(status){
     chip.hidden=true;
     label.textContent='';
     chip.removeAttribute('title');
+    if(mobileAction){mobileAction.style.display='none';mobileAction.removeAttribute('title');}
+    if(mobileLabel) mobileLabel.textContent='';
     return;
   }
   const text=_providerQuotaIndicatorText(status);
@@ -1657,11 +1661,15 @@ function renderProviderQuotaIndicator(status){
     chip.hidden=true;
     label.textContent='';
     chip.removeAttribute('title');
+    if(mobileAction){mobileAction.style.display='none';mobileAction.removeAttribute('title');}
+    if(mobileLabel) mobileLabel.textContent='';
     return;
   }
   label.textContent=text.label;
   chip.title=text.title;
   chip.hidden=false;
+  if(mobileAction){mobileAction.style.display='';mobileAction.title=text.title;}
+  if(mobileLabel) mobileLabel.textContent=text.label;
 }
 async function refreshProviderQuotaIndicator(){
   // Short-circuit before the fetch when the chip is disabled — no point asking
@@ -1669,6 +1677,10 @@ async function refreshProviderQuotaIndicator(){
   if(window._showQuotaChip!==true){
     const chip=$('providerQuotaChip');
     if(chip){chip.hidden=true;chip.removeAttribute('title');}
+    const mobileAction=$('composerMobileQuotaAction');
+    if(mobileAction){mobileAction.style.display='none';mobileAction.removeAttribute('title');}
+    const mobileLabel=$('composerMobileQuotaLabel');
+    if(mobileLabel) mobileLabel.textContent='';
     return;
   }
   if(_providerQuotaRefreshInFlight) return;
@@ -4600,7 +4612,7 @@ function _clearActivityElapsedTimer(){
   _activityElapsedTimerGroup=null;
 }
 
-const _MOBILE_CONFIG_BASE_LABEL='Workspace, model, reasoning, and context settings';
+const _MOBILE_CONFIG_BASE_LABEL='Workspace, model, quota, reasoning, and context settings';
 
 function _setCtxCompressButton(btn,text){
   if(!btn)return;
